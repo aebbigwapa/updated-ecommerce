@@ -95,6 +95,7 @@ const API = {
         removeCartItem: (id)           => _delete(`/buyer/api/cart/${encodeURIComponent(id)}`),
         checkout:       (payload)      => _post('/buyer/api/checkout', payload),
         getOrders:      ()             => _get('/buyer/api/orders'),
+        getOrder:       (id)           => _get(`/buyer/api/orders/${encodeURIComponent(id)}`),
         getProfile:     ()             => _get('/buyer/api/profile'),
         getAddresses:   ()             => _get('/buyer/api/addresses'),
         createAddress:  (payload)      => _post('/buyer/api/addresses', payload),

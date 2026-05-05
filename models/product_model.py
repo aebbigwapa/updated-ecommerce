@@ -14,13 +14,10 @@ class ProductModel:
         """Get product by ID with variants and images"""
         result = self.supabase.table('products').select(
             '*, seller:users!products_seller_id_fkey(id, first_name, last_name), product_variants (*), product_images (*)'
-        ).eq('id', product_id).limit(1).execute()
+        ).eq('id', product_id).single().execute()
         if not result.data:
             return None
-        product = result.data[0]
-        # Note: Image URLs are used as-is from Supabase storage
-        # No URL modification needed as Supabase returns full URLs
-        return product
+        return result.data
     
     def get_by_id_and_seller(self, product_id, seller_id):
         """Get product by ID only if owned by seller"""

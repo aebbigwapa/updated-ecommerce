@@ -184,6 +184,7 @@ let cartData = [];
 
 function imgUrl(path) {
     if (!path) return null;
+    if (path.startsWith('http://') || path.startsWith('https://')) return path;
     return path.startsWith('/') ? path : '/' + path;
 }
 
