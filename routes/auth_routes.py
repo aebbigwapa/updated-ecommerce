@@ -17,6 +17,37 @@ def _normalize_field(value):
         return ''
     return str(value)
 
+@auth_bp.route('/captcha-page')
+def captcha_page():
+    """Serves reCAPTCHA v2 page for Flutter mobile WebView."""
+    site_key = os.getenv('RECAPTCHA_SITE_KEY', '')
+    html = f'''<!DOCTYPE html>
+<html>
+<head>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <style>
+    * {{ margin: 0; padding: 0; box-sizing: border-box; }}
+    body {{ background: #fff; display: flex; justify-content: center;
+            align-items: center; min-height: 100vh; padding: 8px; }}
+  </style>
+</head>
+<body>
+  <div class="g-recaptcha"
+       data-sitekey="{site_key}"
+       data-callback="onVerified"
+       data-expired-callback="onExpired">
+  </div>
+  <script src="https://www.google.com/recaptcha/api.js" async defer></script>
+  <script>
+    function onVerified(token) {{ CaptchaChannel.postMessage(token); }}
+    function onExpired()        {{ CaptchaChannel.postMessage('expired'); }}
+  </script>
+</body>
+</html>'''
+    from flask import Response
+    return Response(html, mimetype='text/html')
+
+
 @auth_bp.route('/register', methods=['GET', 'POST'])
 @rate_limit(max_calls=10, window_seconds=300)
 def register():
@@ -223,10 +254,12 @@ def _handle_login():
         if is_locked:
             return jsonify({'error': lockout_msg}), 403
         
-        # Always verify CAPTCHA
-        is_valid, captcha_error = verify_recaptcha(captcha_response)
-        if not is_valid:
-            return jsonify({'error': 'CAPTCHA verification failed. Please try again.'}), 400
+        # Skip CAPTCHA for mobile API requests (token-based, no browser session)
+        is_api = request.path.startswith('/api/')
+        if not is_api:
+            is_valid, captcha_error = verify_recaptcha(captcha_response)
+            if not is_valid:
+                return jsonify({'error': 'CAPTCHA verification failed. Please try again.'}), 400
         
         result = auth_service.authenticate_user(email, password)
         

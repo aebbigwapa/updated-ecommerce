@@ -346,12 +346,14 @@ function loadCart() {
 
         container.innerHTML = cart.map(item => {
             const imgSrc = item.image || null;
+            const name   = item.product_name || item.name || 'Product';
+            const price  = item.price ?? item.price_snapshot ?? 0;
             return `
             <div class="cart-item">
                 <div class="cart-item-img">${imgSrc ? `<img src="${imgSrc}" onerror="this.parentElement.innerHTML='🛍️'">` : '🛍️'}</div>
                 <div class="flex-grow-1">
-                    <div style="font-size:14px;font-weight:600;margin-bottom:4px">${item.name || item.product?.name || 'Product'}</div>
-                    <div style="font-size:15px;font-weight:700;color:var(--pink);margin-bottom:8px">${formatCurrency(item.price_snapshot)}</div>
+                    <div style="font-size:14px;font-weight:600;margin-bottom:4px">${name}</div>
+                    <div style="font-size:15px;font-weight:700;color:var(--pink);margin-bottom:8px">${formatCurrency(price)}</div>
                     <div class="qty-control">
                         <button class="qty-btn" onclick="changeQty('${item.id}', ${Number(item.quantity) - 1})">−</button>
                         <span class="qty-value">${item.quantity}</span>
@@ -365,7 +367,7 @@ function loadCart() {
             </div>`;
         }).join('');
 
-        updateCartSummary(cart.map(i => ({ price: Number(i.price_snapshot || 0), qty: Number(i.quantity || 0) })));
+        updateCartSummary(cart.map(i => ({ price: Number(i.price ?? i.price_snapshot ?? 0), qty: Number(i.quantity || 0) })));
     }).catch(() => {
         container.innerHTML = '<div class="empty-state"><div class="empty-icon">⚠️</div>Failed to load cart.</div>';
     });
@@ -394,12 +396,20 @@ function loadCheckout() {
 
         const list = document.getElementById('checkoutItems');
         if (list) {
-            list.innerHTML = cart.map(i => `
-            <div class="d-flex justify-content-between align-items-center mb-2" style="font-size:13px">
-                <span>🛍️ ${i.product_name || i.name || 'Product'} × ${i.quantity}</span>
-                <span style="font-weight:600">${formatCurrency(i.subtotal)}</span>
-            </div>
-        `).join('');
+            list.innerHTML = cart.map(i => {
+                const imgSrc = i.image;
+                const imgHtml = imgSrc
+                    ? `<img src="${imgSrc}" style="width:36px;height:36px;object-fit:cover;border-radius:6px;flex-shrink:0" onerror="this.style.display='none'">`
+                    : `<span style="font-size:20px">🛍️</span>`;
+                return `
+                <div class="d-flex align-items-center justify-content-between mb-2 gap-2" style="font-size:13px">
+                    <div class="d-flex align-items-center gap-2">
+                        ${imgHtml}
+                        <span>${i.product_name || i.name || 'Product'} × ${i.quantity}</span>
+                    </div>
+                    <span style="font-weight:600;white-space:nowrap">${formatCurrency(i.subtotal)}</span>
+                </div>`;
+            }).join('');
         }
 
         updateCartSummary(cart.map(i => ({ price: Number(i.price || i.price_snapshot || 0), qty: Number(i.quantity || 0) })));
@@ -468,39 +478,34 @@ async function loadOrderSummary() {
     const id = new URLSearchParams(window.location.search).get('id');
     if (!id) return;
 
-    const order = await fetch(`/buyer/api/orders/${id}`).then(r => r.json()).catch(() => null);
-    if (!order) return;
+    const res = await fetch(`/buyer/api/orders/${id}`).then(r => r.json()).catch(() => null);
+    if (!res) return;
+    // Unwrap {success, data: {order: {...}}} envelope
+    const order = (res.data && res.data.order) ? res.data.order : (res.order || res);
+    if (!order || (!order.order_id && !order.id)) return;
+
+    const orderId = order.order_id || order.id || '';
+    const total   = order.total_price ?? order.total_amount ?? order.total ?? 0;
+    const status  = order.status || 'pending';
 
     const set = (elId, val) => { const el = document.getElementById(elId); if (el) el.innerHTML = val; };
-    set('orderId',    `#${order.id?.slice(0,8).toUpperCase()}`);
-    set('orderDate',  formatDate(order.created_at));
-    set('orderTotal', formatCurrency(order.total));
-    set('orderStatus', `<span class="badge bg-dark">${order.status.replace(/_/g, ' ').toUpperCase()}</span>`);
+    set('orderId',     `#${orderId.slice(0,8).toUpperCase()}`);
+    set('orderDate',   formatDate(order.created_at));
+    set('orderTotal',  formatCurrency(total));
+    set('orderStatus', `<span class="badge bg-dark">${status.replace(/_/g, ' ').toUpperCase()}</span>`);
 
     const statusOrder = ['pending', 'processing', 'ready_for_pickup', 'in_transit', 'delivered'];
-    const currentIndex = statusOrder.indexOf(order.status);
+    const currentIndex = statusOrder.indexOf(status);
 
-    statusOrder.forEach((status, index) => {
-        const item = document.getElementById(`step-${status}`);
-        const dateEl = document.getElementById(`step-${status}-date`);
+    statusOrder.forEach((s, index) => {
+        const item   = document.getElementById(`step-${s}`);
+        const dateEl = document.getElementById(`step-${s}-date`);
         if (!item || !dateEl) return;
-
-        if (index <= currentIndex) {
-            item.classList.add('done');
-            item.classList.remove('active');
-        } else {
-            item.classList.remove('done');
-            item.classList.remove('active');
-        }
-        if (index === currentIndex) {
-            item.classList.add('active');
-        }
-
-        if (status === 'pending') {
-            dateEl.textContent = formatDate(order.created_at);
-        } else {
-            dateEl.textContent = index <= currentIndex ? 'Completed' : 'Pending';
-        }
+        item.classList.toggle('done',   index <= currentIndex);
+        item.classList.toggle('active', index === currentIndex);
+        dateEl.textContent = s === 'pending'
+            ? formatDate(order.created_at)
+            : index <= currentIndex ? 'Completed' : 'Pending';
     });
 }
 
@@ -522,21 +527,25 @@ async function loadOrders() {
         return;
     }
 
-    container.innerHTML = data.map(o => `
+    container.innerHTML = data.map(o => {
+        const orderId = o.order_id || o.id || '';
+        const total   = o.total_price ?? o.total_amount ?? o.total ?? 0;
+        return `
         <div class="card mb-3 border-0 shadow-sm">
             <div class="card-body">
                 <div class="d-flex justify-content-between align-items-start mb-2">
                     <div>
-                        <div style="font-size:13px;font-weight:700">Order #${(o.id||'').slice(0,8).toUpperCase()}</div>
+                        <div style="font-size:13px;font-weight:700">Order #${orderId.slice(0,8).toUpperCase()}</div>
                         <div style="font-size:12px;color:var(--gray)">${formatDate(o.created_at)}</div>
                     </div>
                     <span class="badge badge-${o.status} text-uppercase">${o.status}</span>
                 </div>
-                <div style="font-size:13px;margin-bottom:8px">${o.items_count || 0} item(s) · <strong>${formatCurrency(o.total)}</strong></div>
-                <a href="/buyer/order_summary?id=${o.id}" class="btn-outline-pink px-3 py-1" style="font-size:12px">View Details</a>
+                <div style="font-size:13px;margin-bottom:8px">${o.items_count || 0} item(s) · <strong>${formatCurrency(total)}</strong></div>
+                <a href="/buyer/order_summary?id=${orderId}" class="btn-outline-pink px-3 py-1" style="font-size:12px">View Details</a>
             </div>
         </div>
-    `).join('');
+    `;
+    }).join('');
 }
 
 // ── Wishlist page ─────────────────────────────────────────────
@@ -726,8 +735,26 @@ async function setDefault(id) {
 }
 
 async function editAddress(id) {
-    // For now, just show a message. You can implement full editing later
-    showToast('Edit address feature coming soon!', true);
+    const raw = await API.buyer.getAddresses().catch(() => null);
+    const addresses = Array.isArray(raw) ? raw : (raw && raw.addresses ? raw.addresses : []);
+    const a = addresses.find(addr => addr.id === id);
+    if (!a) return;
+
+    const label    = prompt('Label (e.g. Home):', a.label || ''); if (label === null) return;
+    const street   = prompt('Street:', a.street || '');           if (street === null) return;
+    const barangay = prompt('Barangay:', a.barangay || '');       if (barangay === null) return;
+    const city     = prompt('City:', a.city || '');               if (city === null) return;
+    const region   = prompt('Region:', a.region || '');           if (region === null) return;
+    const zip_code = prompt('ZIP Code:', a.zip_code || '');       if (zip_code === null) return;
+
+    const res = await fetch(`/buyer/api/addresses/${id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ label, street, barangay, city, region, zip_code }),
+    }).then(r => r.json()).catch(() => ({ error: 'Network error.' }));
+
+    showToast(res.success ? 'Address updated!' : (res.error || 'Failed to update.'), !res.success);
+    if (res.success) loadAddressBook();
 }
 
 // ── Settings page ─────────────────────────────────────────────

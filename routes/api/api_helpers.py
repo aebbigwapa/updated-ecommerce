@@ -476,6 +476,7 @@ def serialize_order(o: Dict[str, Any]) -> Dict[str, Any]:
         items_out.append({
             "product_id":   it.get("product_id"),
             "product_name": prod.get("name") if isinstance(prod, dict) else "",
+            "image":        _primary_image_url(prod) if isinstance(prod, dict) else None,
             "variant_id":   it.get("variant_id"),
             "variant": {
                 "size": variant.get("size") if isinstance(variant, dict) else None,
@@ -491,6 +492,7 @@ def serialize_order(o: Dict[str, Any]) -> Dict[str, Any]:
         })
 
     return {
+        "id":               o.get("id"),
         "order_id":         o.get("id"),
         "status":           o.get("status") or "pending",
         "total_price":      float(o.get("total_amount") or 0),

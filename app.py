@@ -43,6 +43,9 @@ def create_app():
     from routes.api.products_api import products_api_bp
     from routes.api.cart_api import cart_api_bp
     from routes.api.orders_api import orders_api_bp
+    from routes.api.seller_api import seller_api_bp
+    from routes.api.admin_api import admin_api_bp as mobile_admin_api_bp
+    from routes.api.rider_api import rider_api_bp
     
     app.register_blueprint(auth_bp)
     app.register_blueprint(admin_bp, url_prefix='/admin')
@@ -52,10 +55,13 @@ def create_app():
     app.register_blueprint(messages_bp)
     
     # Register API routes with /api prefix
-    app.register_blueprint(auth_api_bp, url_prefix='/api')
-    app.register_blueprint(products_api_bp, url_prefix='/api')
-    app.register_blueprint(cart_api_bp, url_prefix='/api')
-    app.register_blueprint(orders_api_bp, url_prefix='/api')
+    app.register_blueprint(auth_api_bp,     url_prefix='/api')
+    app.register_blueprint(products_api_bp,  url_prefix='/api')
+    app.register_blueprint(cart_api_bp,      url_prefix='/api')
+    app.register_blueprint(orders_api_bp,    url_prefix='/api')
+    app.register_blueprint(seller_api_bp,    url_prefix='/api')
+    app.register_blueprint(mobile_admin_api_bp, url_prefix='/api')
+    app.register_blueprint(rider_api_bp,        url_prefix='/api')
 
     # Register API error handlers for Flutter compatibility
     from routes.api.api_helpers import register_api_error_handlers
@@ -78,25 +84,6 @@ def create_app():
         products = product_model.get_all_active()
         return __import__('flask').render_template('buyer/index.html', products=products)
 
-    @app.route('/api/products')
-    def api_public_products():
-        from flask import request
-        from models.product_model import ProductModel
-        from routes.api.api_helpers import api_response, api_error, serialize_product
-        
-        try:
-            product_model = ProductModel()
-            category = request.args.get('category', '').strip() or None
-            products = product_model.get_all_active(category=category)
-            items = [serialize_product(p) for p in (products or [])]
-            return api_response(
-                data={"products": items, "count": len(items)},
-                message="OK",
-                status=200,
-            )
-        except Exception as e:
-            return api_error(f"Failed to fetch products: {e}", status=500)
-    
     # Note: /login and /logout are handled by auth_bp blueprint
     # No need to duplicate them here
     
@@ -105,4 +92,4 @@ def create_app():
 # For backward compatibility
 if __name__ == '__main__':
     app = create_app()
-    app.run(debug=True)
+    app.run(debug=True, host='0.0.0.0', port=5000, threaded=True)

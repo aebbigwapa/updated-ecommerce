@@ -20,6 +20,53 @@ function showToast(msg, isError = false) {
     setTimeout(() => t.classList.remove('show'), 3000);
 }
 
+// ── Real-time polling ─────────────────────────────────────────
+const POLL_INTERVAL = 15000; // 15 seconds
+let _pollTimer = null;
+let _pollFn    = null;
+
+function startPolling(fn) {
+    _pollFn = fn;
+    stopPolling();
+    _pollTimer = setInterval(async () => {
+        setSyncState('syncing');
+        try {
+            await fn();
+            setSyncState('live');
+        } catch {
+            setSyncState('error');
+        }
+    }, POLL_INTERVAL);
+}
+
+function stopPolling() {
+    if (_pollTimer) { clearInterval(_pollTimer); _pollTimer = null; }
+}
+
+function setSyncState(state) {
+    const el = document.getElementById('syncIndicator');
+    if (!el) return;
+    const states = {
+        live:    { dot: '#22c55e', text: 'Live' },
+        syncing: { dot: '#f59e0b', text: 'Syncing…' },
+        error:   { dot: '#ef4444', text: 'Offline' },
+    };
+    const s = states[state] || states.live;
+    el.querySelector('.sync-dot').style.background = s.dot;
+    el.querySelector('.sync-text').textContent = s.text;
+}
+
+// Pause polling while a modal is open to avoid disrupting the admin
+function pausePollingWhileModalOpen(overlayId) {
+    const overlay = document.getElementById(overlayId);
+    if (!overlay) return;
+    const observer = new MutationObserver(() => {
+        if (overlay.classList.contains('open')) stopPolling();
+        else if (_pollFn) startPolling(_pollFn);
+    });
+    observer.observe(overlay, { attributes: true, attributeFilter: ['class'] });
+}
+
 // ── Sidebar mobile toggle ─────────────────────────────────────
 document.addEventListener('DOMContentLoaded', () => {
     const toggle  = document.getElementById('sidebarToggle');
@@ -41,13 +88,46 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     // Init page based on what's present in DOM
-    if (document.getElementById('recentApps'))   loadDashboard();
-    if (document.getElementById('appTableBody')) loadApplications();
-    if (document.getElementById('usersTable'))   loadUsers();
-    if (document.getElementById('sellersTable')) loadSellers();
-    if (document.getElementById('ridersTable'))  loadRiders();
-    if (document.getElementById('ordersTable'))  loadAdminOrders();
-    if (document.getElementById('productsTableBody')) loadAdminProducts();
+    if (document.getElementById('recentApps')) {
+        loadDashboard();
+        startPolling(loadDashboard);
+        pausePollingWhileModalOpen('modalOverlay');
+    }
+    if (document.getElementById('appTableBody')) {
+        loadApplications();
+        startPolling(loadApplications);
+        pausePollingWhileModalOpen('modalOverlay');
+        pausePollingWhileModalOpen('rejectOverlay');
+    }
+    if (document.getElementById('usersTable')) {
+        loadUsers();
+        startPolling(loadUsers);
+    }
+    if (document.getElementById('sellersTable')) {
+        loadSellers();
+        startPolling(loadSellers);
+        pausePollingWhileModalOpen('rejectOverlay');
+    }
+    if (document.getElementById('ridersTable')) {
+        loadRiders();
+        startPolling(loadRiders);
+        pausePollingWhileModalOpen('rejectOverlay');
+    }
+    if (document.getElementById('ordersTable')) {
+        loadAdminOrders();
+        startPolling(loadAdminOrders);
+    }
+    if (document.getElementById('productsTableBody')) {
+        loadAdminProducts();
+        startPolling(loadAdminProducts);
+        pausePollingWhileModalOpen('productModalOverlay');
+    }
+
+    // Stop polling when tab is hidden, resume when visible
+    document.addEventListener('visibilitychange', () => {
+        if (document.hidden) stopPolling();
+        else if (_pollFn) startPolling(_pollFn);
+    });
 });
 
 // ── Status update (shared) ────────────────────────────────────

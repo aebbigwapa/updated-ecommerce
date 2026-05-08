@@ -209,15 +209,17 @@ def api_delivery_locations(order_id):
 @rider_bp.route('/api/dashboard', methods=['GET'])
 @rider_required
 def api_rider_dashboard():
-    """Rider dashboard summary: deliveries + earnings."""
+    """Rider dashboard summary: deliveries + earnings + recent_deliveries for map."""
     from supabase import create_client
     from datetime import datetime, timezone, timedelta
     import os
     rider_id = session['user']['id']
     sb = create_client(os.getenv('SUPABASE_URL'), os.getenv('SUPABASE_SERVICE_ROLE_KEY'))
 
-    # All orders assigned to this rider
+    # All orders assigned to this rider (in_transit + delivered)
     all_assigned = order_model.get_assigned_orders_for_rider(rider_id)
+    # Also get ready_for_pickup orders (not yet accepted by anyone)
+    available    = order_model.get_ready_for_pickup_orders()
     completed    = [o for o in all_assigned if o.get('status') == 'delivered']
     active       = [o for o in all_assigned if o.get('status') == 'in_transit']
 
@@ -244,15 +246,37 @@ def api_rider_dashboard():
     settings = sb.table('admin_settings').select('key,value').eq('key', 'rider_rate').execute()
     rider_rate = float((settings.data or [{}])[0].get('value', 50))
 
+    # Build recent_deliveries list with coordinates for the map
+    # Includes: active (in_transit) assigned to this rider + available ready_for_pickup
+    map_orders = active + available
+    recent_deliveries = []
+    for o in map_orders:
+        address = o.get('shipping_address') or {}
+        buyer   = o.get('buyer') or {}
+        recent_deliveries.append({
+            'id':                 o.get('id'),
+            'status':             o.get('status'),
+            'address':            ', '.join(str(x) for x in [
+                                      address.get('street'), address.get('barangay'),
+                                      address.get('city'), address.get('region')
+                                  ] if x),
+            'delivery_latitude':  address.get('latitude'),
+            'delivery_longitude': address.get('longitude'),
+            'customer_name':      f"{buyer.get('first_name','')} {buyer.get('last_name','')}".strip(),
+            'shipping_address':   address,
+        })
+
     return jsonify({
         'total_deliveries':     len(all_assigned),
         'completed_deliveries': len(completed),
         'active_deliveries':    len(active),
+        'available_orders':     len(available),
         'total_earnings':       round(total_earn, 2),
         'today_earnings':       round(today_earn, 2),
         'week_earnings':        round(week_earn, 2),
         'month_earnings':       round(month_earn, 2),
         'rate_per_delivery':    rider_rate,
+        'recent_deliveries':    recent_deliveries,
     })
 
 

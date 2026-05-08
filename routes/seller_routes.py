@@ -488,7 +488,3 @@ def store():
 def reviews():
     return render_template('seller/reviews.html')
 
-# Aliases for backward compatibility
-product_add_view = product_add
-products_view = products
-dashboard_view = dashboard

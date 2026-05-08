@@ -2,13 +2,15 @@ from supabase import create_client
 import os
 
 class OrderModel:
-    """Handles all order-related database operations"""
-    
+    _supabase = None
+
     def __init__(self):
-        self.supabase = create_client(
-            os.getenv('SUPABASE_URL'),
-            os.getenv('SUPABASE_SERVICE_ROLE_KEY')
-        )
+        if OrderModel._supabase is None:
+            OrderModel._supabase = create_client(
+                os.getenv('SUPABASE_URL'),
+                os.getenv('SUPABASE_SERVICE_ROLE_KEY')
+            )
+        self.supabase = OrderModel._supabase
     
     def _attach_variants(self, items):
         """Fetch variant data separately and attach to order items."""

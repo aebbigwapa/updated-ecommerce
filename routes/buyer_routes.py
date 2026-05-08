@@ -42,7 +42,6 @@ def market():
     return render_template('buyer/market.html')
 
 @buyer_bp.route('/product')
-@buyer_required
 def product():
     return render_template('buyer/product.html')
 
@@ -125,6 +124,14 @@ def address_book():
 @buyer_required
 def order_summary():
     return render_template('buyer/order_summary.html')
+
+@buyer_bp.route('/profile')
+@buyer_required
+def profile():
+    user_id = session['user']['id']
+    profile_data = user_model.get_by_id(user_id) or {}
+    addresses = user_model.get_addresses(user_id) or []
+    return render_template('buyer/profile.html', profile=profile_data, addresses=addresses)
 
 @buyer_bp.route('/notifications')
 @buyer_required
@@ -664,6 +671,29 @@ def api_set_default_address(address_id):
     except Exception as e:
         return api_error(f"Failed to set default address: {e}", status=500)
 
+@buyer_bp.route('/api/profile', methods=['GET'])
+@buyer_required
+def api_get_profile():
+    try:
+        user_id = session['user']['id']
+        user = user_model.get_by_id(user_id)
+        if not user:
+            return api_error('User not found', status=404)
+        return api_response(
+            data={"user": {
+                'id':         user.get('id'),
+                'first_name': user.get('first_name', ''),
+                'last_name':  user.get('last_name', ''),
+                'email':      user.get('email', ''),
+                'phone':      user.get('phone', ''),
+                'gender':     user.get('gender', ''),
+                'role':       user.get('role', ''),
+            }},
+            message='OK', status=200,
+        )
+    except Exception as e:
+        return api_error(f'Failed to fetch profile: {e}', status=500)
+
 @buyer_bp.route('/api/profile', methods=['PUT'])
 @buyer_required
 def api_update_profile():
@@ -680,6 +710,8 @@ def api_update_profile():
             update_data['last_name']  = name_parts[1] if len(name_parts) > 1 else ''
         if 'phone' in data:
             update_data['phone'] = sanitise(data['phone'], 20)
+        if 'gender' in data and data['gender'] in ('male', 'female', 'other', ''):
+            update_data['gender'] = data['gender']
 
         if not update_data:
             return api_error("No fields to update", status=400)
@@ -738,10 +770,20 @@ def api_change_password():
         return api_error(f'Failed to change password: {e}', status=500)
 
 
-@buyer_bp.route('/profile')
+
+@buyer_bp.route('/api/account', methods=['DELETE'])
 @buyer_required
-def profile():
-    return redirect(url_for('buyer.settings'))
+def api_delete_account():
+    try:
+        user_id = session['user']['id']
+        # Soft-delete: mark user as inactive rather than hard delete
+        updated = user_model.update(user_id, {'role': 'deleted', 'email': f'deleted_{user_id}@deleted.invalid'})
+        if updated:
+            session.clear()
+            return api_response(data={}, message='Account deleted successfully', status=200)
+        return api_error('Failed to delete account', status=500)
+    except Exception as e:
+        return api_error(f'Failed to delete account: {e}', status=500)
 
 @buyer_bp.route('/settings')
 @buyer_required
@@ -921,7 +963,3 @@ def api_can_review(order_id, product_id):
     except Exception as e:
         return api_error(f"Failed to check review eligibility: {e}", status=500)
 
-# Aliases for backward compatibility  
-market_view = market
-cart_view = cart
-profile_view = profile

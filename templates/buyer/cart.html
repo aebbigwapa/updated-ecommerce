@@ -195,7 +195,7 @@ function fmt(amount) {
 // ── Render one cart item ──────────────────────────────────────
 function renderItem(item) {
     const img      = imgUrl(item.image);
-    const name     = item.name || item.product?.name || 'Product';
+    const name     = item.product_name || item.name || item.product?.name || 'Product';
     const price    = Number(item.price || item.price_snapshot || 0);
     const qty      = Number(item.quantity || 1);
     const sub      = price * qty;

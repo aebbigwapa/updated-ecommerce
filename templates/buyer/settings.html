@@ -152,7 +152,7 @@
                         {% if not loop.last %}<hr class="my-1">{% endif %}
                         {% endfor %}
                         <div class="mt-1">
-                            <button class="btn-pink px-4 py-2">Save Preferences</button>
+                            <button id="saveNotifBtn" class="btn-pink px-4 py-2">Save Preferences</button>
                         </div>
                     </div>
                 </div>
@@ -192,13 +192,13 @@
                                 <div style="font-size:13px;font-weight:600">Current Device</div>
                                 <div style="font-size:12px;color:var(--gray)">Browser · Active now</div>
                             </div>
-                            <button class="btn btn-sm btn-outline-danger mt-2">Sign Out All Devices</button>
+                            <button id="signOutAllBtn" class="btn btn-sm btn-outline-danger mt-2">Sign Out All Devices</button>
                         </div>
                         <hr class="my-1">
                         <div>
                             <div style="font-size:14px;font-weight:600;color:#ef4444;margin-bottom:4px">Delete Account</div>
                             <div style="font-size:12px;color:var(--gray);margin-bottom:12px">Permanently delete your account and all data</div>
-                            <button class="btn btn-sm btn-outline-danger">Delete My Account</button>
+                            <button id="deleteAccountBtn" class="btn btn-sm btn-outline-danger">Delete My Account</button>
                         </div>
                     </div>
                 </div>
@@ -269,12 +269,60 @@ async function changePassword(e) {
     showToast(res.success ? 'Password changed!' : (res.error || 'Failed.'), !res.success);
 }
 
-document.addEventListener('DOMContentLoaded', () => {
+document.addEventListener('DOMContentLoaded', async () => {
     const hash = window.location.hash.replace('#', '');
     if (hash && document.getElementById(hash)) {
         const link = document.querySelector('[data-section="' + hash + '"]');
         if (link) switchSection(link);
     }
+
+    // Pre-fill phone and gender from API
+    try {
+        const res = await fetch('/buyer/api/profile').then(r => r.json()).catch(() => null);
+        const user = res && res.data && res.data.user ? res.data.user : null;
+        if (user) {
+            const phoneEl  = document.getElementById('profilePhone');
+            const genderEl = document.getElementById('profileGender');
+            if (phoneEl  && user.phone)  phoneEl.value  = user.phone;
+            if (genderEl && user.gender) genderEl.value = user.gender;
+        }
+    } catch (_) {}
+
+    // Notification preferences — persist in localStorage
+    const NOTIF_KEY = 'grande_notif_prefs';
+    const saved = JSON.parse(localStorage.getItem(NOTIF_KEY) || 'null');
+    const checkboxes = document.querySelectorAll('#sectionNotif input[type=checkbox]');
+    if (saved && Array.isArray(saved)) {
+        checkboxes.forEach((cb, i) => { if (saved[i] !== undefined) cb.checked = saved[i]; });
+    }
+    document.getElementById('saveNotifBtn')?.addEventListener('click', () => {
+        const prefs = Array.from(checkboxes).map(cb => cb.checked);
+        localStorage.setItem(NOTIF_KEY, JSON.stringify(prefs));
+        showToast('Notification preferences saved!');
+    });
+
+    // Sign Out All Devices
+    document.getElementById('signOutAllBtn')?.addEventListener('click', () => {
+        if (confirm('Sign out from all devices? You will be logged out now.')) {
+            window.location.href = '/logout';
+        }
+    });
+
+    // Delete Account
+    document.getElementById('deleteAccountBtn')?.addEventListener('click', async () => {
+        const confirmed = prompt('Type DELETE to permanently delete your account:');
+        if (confirmed !== 'DELETE') return;
+        const res = await fetch('/buyer/api/account', {
+            method: 'DELETE',
+            headers: { 'X-CSRF-Token': CSRF() }
+        }).then(r => r.json()).catch(() => ({ error: 'Network error.' }));
+        if (res.success) {
+            showToast('Account deleted. Redirecting...');
+            setTimeout(() => window.location.href = '/', 1500);
+        } else {
+            showToast(res.error || 'Failed to delete account.', true);
+        }
+    });
 });
 </script>
 </body>

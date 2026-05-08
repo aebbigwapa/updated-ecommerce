@@ -32,6 +32,7 @@ _CSRF_EXEMPT = {
     '/login', '/register', '/logout',
     '/forgot-password', '/send-otp', '/verify-otp',
     '/reset-password',
+    '/api/',
     '/admin/api', '/seller/api', '/buyer/api', '/rider/api',
     '/messages/api'
 }

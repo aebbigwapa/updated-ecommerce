@@ -90,3 +90,36 @@
     .detail-row    { flex-direction: column; gap: 2px; }
     .detail-label  { min-width: unset; }
 }
+
+/* ── Real-time sync indicator ─────────────────────────────── */
+#syncIndicator {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 12px;
+    font-weight: 500;
+    color: #555;
+    background: #f4f4f8;
+    border: 1px solid #e0e0ea;
+    border-radius: 20px;
+    padding: 4px 12px;
+    margin-left: 12px;
+    user-select: none;
+}
+
+.sync-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: #22c55e;
+    flex-shrink: 0;
+    transition: background 0.3s;
+    animation: syncPulse 2s infinite;
+}
+
+@keyframes syncPulse {
+    0%, 100% { opacity: 1; }
+    50%       { opacity: 0.4; }
+}
+
+.sync-text { color: #444; }

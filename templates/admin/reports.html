@@ -7,6 +7,7 @@
     <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@600;700&family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/dashboard.css') }}">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/admin.css') }}">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 </head>
 <body>
 
@@ -26,7 +27,7 @@
         <li><a href="/admin/products"><span class="icon">📦</span> Products</a></li>
         <li><a href="/admin/orders"><span class="icon">🛒</span> Orders</a></li>
         <li class="menu-group">SYSTEM</li>
-        <li><a href="/admin/reports" class="active"><span class="icon">🚩</span> Reports</a></li>
+        <li><a href="/admin/reports" class="active"><span class="icon">📊</span> Reports</a></li>
         <li><a href="/admin/settings"><span class="icon">⚙️</span> Settings</a></li>
     </ul>
     <div class="sidebar-footer">
@@ -37,18 +38,195 @@
 
 <div class="main">
     <div class="topbar">
-        <div class="topbar-title">Reports & Disputes</div>
+        <div class="topbar-title">Reports & Analytics</div>
         <div class="topbar-right">Admin Panel</div>
     </div>
     <div class="content">
-        <div class="card">
-            <div class="card-header"><h2>Reports & Disputes</h2></div>
-            <div class="empty-state"><div class="empty-icon">🚩</div>No reports yet.</div>
+
+        <!-- Summary stat cards -->
+        <div class="stats" id="reportStats">
+            <div class="stat-card"><div class="stat-label">Total Users</div><div class="stat-value" id="rTotalUsers">—</div><div class="stat-icon">👥</div></div>
+            <div class="stat-card"><div class="stat-label">Total Orders</div><div class="stat-value" id="rTotalOrders">—</div><div class="stat-icon">🛒</div></div>
+            <div class="stat-card"><div class="stat-label">Total Revenue</div><div class="stat-value" id="rTotalRevenue">—</div><div class="stat-icon">💰</div></div>
+            <div class="stat-card"><div class="stat-label">Active Products</div><div class="stat-value" id="rActiveProducts">—</div><div class="stat-icon">📦</div></div>
         </div>
+
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;margin-bottom:20px">
+
+            <!-- Order status breakdown chart -->
+            <div class="card">
+                <div class="card-header"><h2>Order Status Breakdown</h2></div>
+                <div style="padding:20px">
+                    <canvas id="statusChart" height="220"></canvas>
+                </div>
+            </div>
+
+            <!-- Sales trend chart -->
+            <div class="card">
+                <div class="card-header">
+                    <h2>Sales Trend</h2>
+                    <div style="display:flex;gap:6px">
+                        <button class="filter-tab active" onclick="changePeriod('daily',this)">Daily</button>
+                        <button class="filter-tab" onclick="changePeriod('weekly',this)">Weekly</button>
+                        <button class="filter-tab" onclick="changePeriod('monthly',this)">Monthly</button>
+                    </div>
+                </div>
+                <div style="padding:20px">
+                    <canvas id="salesChart" height="220"></canvas>
+                </div>
+            </div>
+        </div>
+
+        <!-- User role breakdown -->
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;margin-bottom:20px">
+            <div class="card">
+                <div class="card-header"><h2>User Roles</h2></div>
+                <div style="padding:20px">
+                    <canvas id="userChart" height="200"></canvas>
+                </div>
+            </div>
+
+            <!-- Commission summary -->
+            <div class="card">
+                <div class="card-header"><h2>Commission Summary</h2></div>
+                <div style="padding:20px" id="commissionSummary">
+                    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+                        <div style="background:#f8f9fa;border-radius:10px;padding:16px;text-align:center">
+                            <div style="font-size:11px;color:#6c757d;font-weight:600;text-transform:uppercase;letter-spacing:.5px">Total Commission</div>
+                            <div style="font-size:22px;font-weight:700;color:#1a1a3e;margin-top:4px" id="cTotal">—</div>
+                        </div>
+                        <div style="background:#f8f9fa;border-radius:10px;padding:16px;text-align:center">
+                            <div style="font-size:11px;color:#6c757d;font-weight:600;text-transform:uppercase;letter-spacing:.5px">This Month</div>
+                            <div style="font-size:22px;font-weight:700;color:#FF2BAC;margin-top:4px" id="cMonth">—</div>
+                        </div>
+                        <div style="background:#f8f9fa;border-radius:10px;padding:16px;text-align:center">
+                            <div style="font-size:11px;color:#6c757d;font-weight:600;text-transform:uppercase;letter-spacing:.5px">This Week</div>
+                            <div style="font-size:22px;font-weight:700;color:#1a1a3e;margin-top:4px" id="cWeek">—</div>
+                        </div>
+                        <div style="background:#f8f9fa;border-radius:10px;padding:16px;text-align:center">
+                            <div style="font-size:11px;color:#6c757d;font-weight:600;text-transform:uppercase;letter-spacing:.5px">Rate</div>
+                            <div style="font-size:22px;font-weight:700;color:#1a1a3e;margin-top:4px" id="cRate">—</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Recent orders table -->
+        <div class="card">
+            <div class="card-header"><h2>Recent Orders</h2></div>
+            <table>
+                <thead><tr><th>Order ID</th><th>Buyer</th><th>Rider</th><th>Amount</th><th>Status</th><th>Date</th></tr></thead>
+                <tbody id="recentOrdersTable"></tbody>
+            </table>
+        </div>
+
     </div>
 </div>
 
+<div class="toast" id="toast"></div>
 <script src="{{ url_for('static', filename='js/api.js') }}"></script>
 <script src="{{ url_for('static', filename='js/admin.js') }}"></script>
+<script>
+let salesChartInst = null;
+let statusChartInst = null;
+let userChartInst = null;
+
+function fmt(v) { return '₱' + Number(v||0).toLocaleString('en-PH',{minimumFractionDigits:2}); }
+function fmtDate(iso) { return iso ? new Date(iso).toLocaleDateString('en-PH',{year:'numeric',month:'short',day:'numeric'}) : '—'; }
+
+async function loadReports() {
+    const [dash, earnings, analytics, recent] = await Promise.all([
+        API.admin.getDashboard().catch(() => ({})),
+        API.admin.getEarnings().catch(() => ({})),
+        API.admin.getSalesAnalytics('daily').catch(() => ({data:[]})),
+        API.admin.getRecentOrders(10).catch(() => []),
+    ]);
+
+    // Stat cards
+    const set = (id, v) => { const el = document.getElementById(id); if (el) el.textContent = v; };
+    set('rTotalUsers',    dash.total_users    || 0);
+    set('rTotalOrders',   dash.total_orders   || 0);
+    set('rTotalRevenue',  fmt(dash.total_revenue));
+    set('rActiveProducts', dash.active_products || 0);
+
+    // Commission
+    set('cTotal', fmt(earnings.total_commission));
+    set('cMonth', fmt(earnings.month_commission));
+    set('cWeek',  fmt(earnings.week_commission));
+    set('cRate',  (earnings.commission_rate || 0) + '%');
+
+    // Order status doughnut
+    const breakdown = dash.status_breakdown || {};
+    const statusLabels = ['Pending','Processing','Ready','In Transit','Delivered','Cancelled'];
+    const statusKeys   = ['pending','processing','ready_for_pickup','in_transit','delivered','cancelled'];
+    const statusColors = ['#ffc107','#17a2b8','#fd7e14','#6f42c1','#28a745','#dc3545'];
+    if (statusChartInst) statusChartInst.destroy();
+    statusChartInst = new Chart(document.getElementById('statusChart'), {
+        type: 'doughnut',
+        data: {
+            labels: statusLabels,
+            datasets: [{ data: statusKeys.map(k => breakdown[k] || 0), backgroundColor: statusColors, borderWidth: 2 }]
+        },
+        options: { responsive: true, plugins: { legend: { position: 'right' } } }
+    });
+
+    // User roles pie
+    if (userChartInst) userChartInst.destroy();
+    userChartInst = new Chart(document.getElementById('userChart'), {
+        type: 'pie',
+        data: {
+            labels: ['Buyers','Sellers','Riders','Admins'],
+            datasets: [{ data: [dash.total_buyers||0, dash.total_sellers||0, dash.total_riders||0, 1],
+                backgroundColor: ['#FF2BAC','#1a1a3e','#17a2b8','#6c757d'], borderWidth: 2 }]
+        },
+        options: { responsive: true, plugins: { legend: { position: 'right' } } }
+    });
+
+    // Sales trend bar
+    renderSalesChart(analytics.data || []);
+
+    // Recent orders
+    const tbody = document.getElementById('recentOrdersTable');
+    if (!recent.length) {
+        tbody.innerHTML = '<tr><td colspan="6"><div class="empty-state"><div class="empty-icon">🛒</div>No orders yet.</div></td></tr>';
+    } else {
+        tbody.innerHTML = recent.map(o => `
+            <tr>
+                <td>#${(o.short_id||o.id||'').slice(0,8).toUpperCase()}</td>
+                <td>${o.buyer_name||'—'}</td>
+                <td>${o.rider_name||'Unassigned'}</td>
+                <td>${fmt(o.total_amount)}</td>
+                <td><span class="badge badge-${o.status}">${o.status}</span></td>
+                <td>${fmtDate(o.created_at)}</td>
+            </tr>`).join('');
+    }
+}
+
+function renderSalesChart(data) {
+    if (salesChartInst) salesChartInst.destroy();
+    salesChartInst = new Chart(document.getElementById('salesChart'), {
+        type: 'bar',
+        data: {
+            labels: data.map(d => d.label),
+            datasets: [{
+                label: 'Revenue (₱)', data: data.map(d => d.value),
+                backgroundColor: 'rgba(255,43,172,.15)', borderColor: '#FF2BAC', borderWidth: 2, borderRadius: 6
+            }]
+        },
+        options: { responsive: true, plugins: { legend: { display: false } },
+            scales: { y: { beginAtZero: true, ticks: { callback: v => '₱' + v.toLocaleString() } } } }
+    });
+}
+
+async function changePeriod(period, btn) {
+    document.querySelectorAll('.filter-tab').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    const res = await API.admin.getSalesAnalytics(period).catch(() => ({ data: [] }));
+    renderSalesChart(res.data || []);
+}
+
+document.addEventListener('DOMContentLoaded', loadReports);
+</script>
 </body>
 </html>

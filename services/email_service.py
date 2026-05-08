@@ -121,7 +121,7 @@ def send_order_confirmation(to_email: str, buyer_name: str, order: dict, items: 
       <!-- Footer -->
       <div style="background:#f8f9fa;padding:20px 40px;text-align:center;border-top:1px solid #f0f0f0">
         <p style="font-size:12px;color:#adb5bd;margin:0">
-          &copy; 2025 Grande Marketplace &mdash; This is an automated email, please do not reply.
+          &copy; 2026 Grande Marketplace &mdash; This is an automated email, please do not reply.
         </p>
       </div>
     </div>
@@ -167,7 +167,7 @@ def send_password_reset(to_email: str, name: str, reset_url: str) -> bool:
 
       <div style="background:#f8f9fa;padding:20px 40px;text-align:center;border-top:1px solid #f0f0f0">
         <p style="font-size:12px;color:#adb5bd;margin:0">
-          &copy; 2025 Grande Marketplace &mdash; This is an automated email, please do not reply.
+          &copy; 2026 Grande Marketplace &mdash; This is an automated email, please do not reply.
         </p>
       </div>
     </div>
@@ -210,7 +210,7 @@ def send_otp_email(to_email: str, name: str, otp: str) -> bool:
 
       <div style="background:#f8f9fa;padding:20px 40px;text-align:center;border-top:1px solid #f0f0f0">
         <p style="font-size:12px;color:#adb5bd;margin:0">
-          &copy; 2025 Grande Marketplace &mdash; This is an automated email, please do not reply.
+          &copy; 2026 Grande Marketplace &mdash; This is an automated email, please do not reply.
         </p>
       </div>
     </div>

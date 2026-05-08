@@ -139,12 +139,17 @@ function renderNotifications(items) {
 document.addEventListener('DOMContentLoaded', async () => {
     updateCartBadge();
 
-    // Fetch notifications — endpoint returns [] until backend is implemented
-    const data = await fetch('/buyer/api/notifications')
-        .then(r => r.ok ? r.json() : [])
-        .catch(() => []);
+    // Fetch notifications
+    const res = await fetch('/buyer/api/notifications')
+        .then(r => r.ok ? r.json() : null)
+        .catch(() => null);
 
-    renderNotifications(Array.isArray(data) ? data : []);
+    let items = [];
+    if (Array.isArray(res)) items = res;
+    else if (res && res.data && Array.isArray(res.data.notifications)) items = res.data.notifications;
+    else if (res && Array.isArray(res.notifications)) items = res.notifications;
+
+    renderNotifications(items);
 
     document.getElementById('markAllBtn')?.addEventListener('click', async () => {
         // Call API to mark all as read

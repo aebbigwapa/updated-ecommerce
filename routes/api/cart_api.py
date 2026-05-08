@@ -1,24 +1,22 @@
 """
 /api/cart/* — buyer cart management for Flutter.
-
-All endpoints require an authenticated buyer (Bearer token).
+All endpoints require Bearer token.
 
 Endpoints:
-  GET    /api/cart              -> list cart items + totals
-  POST   /api/cart               -> add item   {product_id, variant_id?, quantity}
-  PATCH  /api/cart/<item_id>    -> update qty {quantity}
-  DELETE /api/cart/<item_id>    -> remove item
-  DELETE /api/cart              -> clear cart
+  GET    /api/cart                      -> list cart items + totals
+  POST   /api/cart                      -> add item {product_id, variant_id?, quantity}
+  PATCH  /api/cart/<uuid:item_id>       -> update qty {quantity}
+  DELETE /api/cart/<uuid:item_id>       -> remove item
+  DELETE /api/cart                      -> clear cart
 """
 
 from flask import Blueprint, request
-
 from routes.api.api_helpers import (
     api_response, api_error, get_json_body,
     token_required, serialize_cart_item,
 )
 
-cart_api_bp = Blueprint('cart_api', __name__, url_prefix='/cart')
+cart_api_bp = Blueprint('cart_api', __name__)
 
 
 def _cart_payload(user_id: str):
@@ -33,8 +31,8 @@ def _cart_payload(user_id: str):
     }
 
 
-@cart_api_bp.get('')
-@cart_api_bp.get('/')
+@cart_api_bp.get('/cart')
+@cart_api_bp.get('/cart/')
 @token_required
 def list_cart():
     user = request.current_user  # type: ignore[attr-defined]
@@ -44,14 +42,14 @@ def list_cart():
         return api_error(f"Failed to load cart: {e}", status=500)
 
 
-@cart_api_bp.post('')
-@cart_api_bp.post('/')
+@cart_api_bp.post('/cart')
+@cart_api_bp.post('/cart/')
 @token_required
 def add_to_cart():
     user = request.current_user  # type: ignore[attr-defined]
     data = get_json_body()
 
-    product_id = (data.get('product_id') or '').strip() if isinstance(data.get('product_id'), str) else data.get('product_id')
+    product_id = (data.get('product_id') or '').strip()
     variant_id = data.get('variant_id') or None
     try:
         quantity = int(data.get('quantity') or 1)
@@ -63,7 +61,6 @@ def add_to_cart():
     if quantity <= 0:
         return api_error("quantity must be greater than 0", status=400)
 
-    import logging
     try:
         from models.product_model import ProductModel
         from models.order_model import OrderModel
@@ -82,36 +79,31 @@ def add_to_cart():
         )
         if not item:
             return api_error("Failed to add item to cart", status=500)
-        # If max is present, inform client
+
         resp = {"cart": _cart_payload(user['id'])}
         if 'max' in item:
             resp['max'] = item['max']
             return api_response(data=resp, message=f"Only {item['max']} in stock", status=200)
         return api_response(data=resp, message="Item added to cart", status=201)
     except Exception as e:
-        logging.error(f"add_to_cart error: {e}")
         return api_error(f"Failed to add to cart: {e}", status=500)
 
 
-@cart_api_bp.patch('/<item_id>')
-@cart_api_bp.put('/<item_id>')
+@cart_api_bp.patch('/cart/<uuid:item_id>')
+@cart_api_bp.put('/cart/<uuid:item_id>')
 @token_required
 def update_cart_item(item_id):
     user = request.current_user  # type: ignore[attr-defined]
     data = get_json_body()
-
     try:
         quantity = int(data.get('quantity'))
     except (TypeError, ValueError):
         return api_error("quantity must be an integer", status=400)
-
     if quantity <= 0:
         return api_error("quantity must be greater than 0", status=400)
-
-    import logging
     try:
         from models.order_model import OrderModel
-        updated = OrderModel().update_cart_item_qty(user['id'], item_id, quantity)
+        updated = OrderModel().update_cart_item_qty(user['id'], str(item_id), quantity)
         if not updated:
             return api_error("Cart item not found or stock unavailable", status=404)
         resp = {"cart": _cart_payload(user['id'])}
@@ -120,17 +112,16 @@ def update_cart_item(item_id):
             return api_response(data=resp, message=f"Only {updated['max']} in stock", status=200)
         return api_response(data=resp, message="Cart updated", status=200)
     except Exception as e:
-        logging.error(f"update_cart_item error: {e}")
         return api_error(f"Failed to update cart: {e}", status=500)
 
 
-@cart_api_bp.delete('/<item_id>')
+@cart_api_bp.delete('/cart/<uuid:item_id>')
 @token_required
 def delete_cart_item(item_id):
     user = request.current_user  # type: ignore[attr-defined]
     try:
         from models.order_model import OrderModel
-        OrderModel().remove_cart_item(user['id'], item_id)
+        OrderModel().remove_cart_item(user['id'], str(item_id))
         return api_response(
             data={"cart": _cart_payload(user['id'])},
             message="Item removed",
@@ -140,8 +131,9 @@ def delete_cart_item(item_id):
         return api_error(f"Failed to remove item: {e}", status=500)
 
 
-@cart_api_bp.delete('')
-@cart_api_bp.delete('/')
+@cart_api_bp.delete('/cart')
+@cart_api_bp.delete('/cart/')
+@cart_api_bp.post('/cart/clear')
 @token_required
 def clear_cart():
     user = request.current_user  # type: ignore[attr-defined]

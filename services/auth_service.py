@@ -7,12 +7,15 @@ from services.file_upload_service import FileUploadService
 from security import validate_password, sanitise, hash_password
 
 class AuthService:
+    _supabase = None  # class-level cached client
 
     def __init__(self):
-        self.supabase = create_client(
-            os.getenv('SUPABASE_URL'),
-            os.getenv('SUPABASE_SERVICE_ROLE_KEY')
-        )
+        if AuthService._supabase is None:
+            AuthService._supabase = create_client(
+                os.getenv('SUPABASE_URL'),
+                os.getenv('SUPABASE_SERVICE_ROLE_KEY')
+            )
+        self.supabase = AuthService._supabase
         self.user_model = UserModel()
         self.app_model = ApplicationModel()
         self.file_service = FileUploadService()

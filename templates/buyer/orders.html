@@ -199,7 +199,8 @@ const CSRF = () => document.querySelector('meta[name="csrf-token"]')?.content ||
 
 async function updateCartBadge() {
     const res = await fetch('/buyer/api/cart').then(r => r.json()).catch(() => null);
-    const items = (res && res.data && Array.isArray(res.data.items)) ? res.data.items : [];
+    const items = (res && res.data && Array.isArray(res.data.items)) ? res.data.items
+        : (res && Array.isArray(res.items)) ? res.items : [];
     const total = items.reduce((s, i) => s + Number(i.quantity || 0), 0);
     document.querySelectorAll('.cart-count').forEach(el => {
         el.textContent = total;

@@ -10,61 +10,25 @@
     <!-- Leaflet CSS -->
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <style>
-        .delivery-map-container {
-            background: #fff; border: 1px solid #e8e8f0;
-            border-radius: 14px; margin-bottom: 20px;
-            overflow: hidden;
-        }
-        .map-header {
-            padding: 16px 20px; border-bottom: 1px solid #e8e8f0;
-            background: #f8f9fa;
-        }
-        .map-header h3 {
-            margin: 0; font-size: 16px; font-weight: 600;
-            color: #1a1a3e;
-        }
-        .delivery-map {
-            height: 400px; width: 100%;
-        }
-        .location-info {
-            padding: 16px 20px; display: grid;
-            grid-template-columns: 1fr 1fr; gap: 20px;
-        }
-        .location-card {
-            padding: 12px; border: 1px solid #e8e8f0;
-            border-radius: 8px; background: #fff;
-        }
-        .location-card h4 {
-            margin: 0 0 8px 0; font-size: 14px;
-            font-weight: 600; display: flex;
-            align-items: center; gap: 8px;
-        }
-        .location-card p {
-            margin: 0; font-size: 13px; color: #6c757d;
-            line-height: 1.4;
-        }
-        .pickup-marker { color: #007bff; }
-        .delivery-marker { color: #dc3545; }
-        .route-info {
-            padding: 12px 20px; background: #f8f9fa;
-            border-top: 1px solid #e8e8f0;
-            display: flex; justify-content: space-between;
-            align-items: center; font-size: 13px;
-        }
-        .route-distance { font-weight: 600; color: #1a1a3e; }
-        .map-toggle {
-            background: #007bff; color: white; border: none;
-            padding: 6px 12px; border-radius: 6px; font-size: 12px;
-            cursor: pointer; margin-left: 8px;
-        }
-        .map-toggle:hover { background: #0056b3; }
-        @media (max-width: 768px) {
-            .location-info {
-                grid-template-columns: 1fr;
-                gap: 12px;
-            }
-            .delivery-map { height: 300px; }
-        }
+        .map-panel { background:#fff; border-radius:14px; margin-bottom:20px; overflow:hidden; box-shadow:0 2px 12px rgba(0,0,0,.08); }
+        .map-panel-header { padding:14px 18px; display:flex; align-items:center; justify-content:space-between; border-bottom:1px solid #f0f0f5; }
+        .map-panel-header h3 { margin:0; font-size:15px; font-weight:600; color:#1a1a3e; }
+        .map-close-btn { background:none; border:none; font-size:20px; cursor:pointer; color:#888; line-height:1; padding:0 4px; }
+        #deliveryMap { height:420px; width:100%; }
+        .map-info-bar { display:grid; grid-template-columns:1fr 1fr; border-top:1px solid #f0f0f5; }
+        .map-info-item { padding:12px 16px; display:flex; align-items:flex-start; gap:10px; }
+        .map-info-item:first-child { border-right:1px solid #f0f0f5; }
+        .map-pin-dot { width:12px; height:12px; border-radius:50%; flex-shrink:0; margin-top:3px; }
+        .map-pin-dot.blue { background:#1565C0; }
+        .map-pin-dot.red  { background:#C62828; }
+        .map-info-label { font-size:11px; font-weight:600; text-transform:uppercase; letter-spacing:.5px; color:#888; margin-bottom:2px; }
+        .map-info-addr  { font-size:13px; color:#1a1a3e; line-height:1.4; }
+        .map-footer { padding:10px 16px; background:#f8f9fb; border-top:1px solid #f0f0f5; display:flex; justify-content:space-between; align-items:center; font-size:13px; color:#555; }
+        .map-footer strong { color:#1a1a3e; }
+        /* Rider dot pulse */
+        .rider-dot { width:16px; height:16px; background:#FF6F00; border-radius:50%; border:3px solid #fff; box-shadow:0 0 0 3px rgba(255,111,0,.35); animation:pulse 1.6s infinite; }
+        @keyframes pulse { 0%,100%{box-shadow:0 0 0 3px rgba(255,111,0,.35)} 50%{box-shadow:0 0 0 7px rgba(255,111,0,.1)} }
+        @media(max-width:600px){ .map-info-bar{grid-template-columns:1fr} .map-info-item:first-child{border-right:none;border-bottom:1px solid #f0f0f5} #deliveryMap{height:300px} }
     </style>
 </head>
 <body>

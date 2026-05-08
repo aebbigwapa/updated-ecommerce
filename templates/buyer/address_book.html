@@ -136,6 +136,51 @@
     </div>
 </div>
 
+<!-- Edit Address Modal -->
+<div class="modal fade" id="editAddressModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content" style="border-radius:16px;border:none">
+            <div class="modal-header border-0 pb-0">
+                <h5 class="modal-title" style="font-family:'Playfair Display',serif;font-size:18px">Edit Address</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <input type="hidden" id="editAddrId">
+                <div class="row g-3">
+                    <div class="col-12">
+                        <label class="form-label-custom">Label</label>
+                        <input type="text" id="editAddrLabel" class="form-control-custom" placeholder="Home">
+                    </div>
+                    <div class="col-12">
+                        <label class="form-label-custom">Street / House No.</label>
+                        <input type="text" id="editAddrStreet" class="form-control-custom">
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label-custom">Barangay</label>
+                        <input type="text" id="editAddrBarangay" class="form-control-custom">
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label-custom">City / Municipality</label>
+                        <input type="text" id="editAddrCity" class="form-control-custom">
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label-custom">Region</label>
+                        <input type="text" id="editAddrRegion" class="form-control-custom">
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label-custom">ZIP Code</label>
+                        <input type="text" id="editAddrZip" class="form-control-custom">
+                    </div>
+                </div>
+                <div class="d-flex gap-3 mt-4">
+                    <button class="btn-pink px-4 py-2 flex-grow-1" onclick="submitEditAddress()">Save Changes</button>
+                    <button type="button" class="btn-outline-pink px-4 py-2" data-bs-dismiss="modal">Cancel</button>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
 <div class="shop-toast" id="shopToast"></div>
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
@@ -188,6 +233,8 @@ async function loadAddressBook() {
             <div style="font-size:13px;color:var(--gray)">${[a.street,a.barangay,a.city,a.region,a.zip_code].filter(Boolean).join(', ')}</div>
             ${a.latitude ? `<div style="font-size:12px;color:var(--gray);margin-top:4px">📍 ${Number(a.latitude).toFixed(5)}, ${Number(a.longitude).toFixed(5)}</div>` : ''}
             <div class="d-flex gap-2 mt-3">
+                <button class="btn btn-sm btn-outline-secondary" onclick="openEditModal('${a.id}','${(a.label||'').replace(/'/g,"\\'")}',' +
+                    `'${(a.street||'').replace(/'/g,"\\'")}','${(a.barangay||'').replace(/'/g,"\\'")}','${(a.city||'').replace(/'/g,"\\'")}','${(a.region||'').replace(/'/g,"\\'")}','${(a.zip_code||'').replace(/'/g,"\\'")}')">Edit</button>
                 <button class="btn btn-sm btn-outline-danger" onclick="deleteAddress('${a.id}')">Delete</button>
                 ${!a.is_default ? `<button class="btn btn-sm btn-outline-success" onclick="setDefault('${a.id}')">Set Default</button>` : ''}
             </div>
@@ -238,6 +285,42 @@ async function saveAddress(e) {
         loadAddressBook();
     } else {
         showToast(res.error || 'Failed to save address.', true);
+    }
+}
+
+function openEditModal(id, label, street, barangay, city, region, zip) {
+    document.getElementById('editAddrId').value      = id;
+    document.getElementById('editAddrLabel').value   = label;
+    document.getElementById('editAddrStreet').value  = street;
+    document.getElementById('editAddrBarangay').value= barangay;
+    document.getElementById('editAddrCity').value    = city;
+    document.getElementById('editAddrRegion').value  = region;
+    document.getElementById('editAddrZip').value     = zip;
+    new bootstrap.Modal(document.getElementById('editAddressModal')).show();
+}
+
+async function submitEditAddress() {
+    const id = document.getElementById('editAddrId').value;
+    const payload = {
+        label:    document.getElementById('editAddrLabel').value.trim(),
+        street:   document.getElementById('editAddrStreet').value.trim(),
+        barangay: document.getElementById('editAddrBarangay').value.trim(),
+        city:     document.getElementById('editAddrCity').value.trim(),
+        region:   document.getElementById('editAddrRegion').value.trim(),
+        zip_code: document.getElementById('editAddrZip').value.trim(),
+    };
+    if (!payload.label) { showToast('Label is required.', true); return; }
+    const res = await fetch(`/buyer/api/addresses/${id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': CSRF() },
+        body: JSON.stringify(payload)
+    }).then(r => r.json()).catch(() => ({ error: 'Network error.' }));
+    if (res.success) {
+        bootstrap.Modal.getInstance(document.getElementById('editAddressModal'))?.hide();
+        showToast('Address updated!');
+        loadAddressBook();
+    } else {
+        showToast(res.error || 'Failed to update.', true);
     }
 }
 
