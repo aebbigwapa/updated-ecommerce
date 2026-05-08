@@ -500,13 +500,17 @@ function buildCarouselSlides(images) {
     const track      = document.getElementById('pdThumbTrack');
     const nav        = document.getElementById('pdThumbNav');
 
+    // Normalise: accept both plain URL strings and {image_url} objects
+    const urls = images.map(img => (typeof img === 'string' ? img : (img.image_url || ''))).filter(Boolean);
+    totalImages = urls.length;
+
     // Dispose existing Bootstrap carousel instance properly
     try {
         const existing = bootstrap.Carousel.getInstance(carouselEl);
         if (existing) existing.dispose();
     } catch(e) {}
 
-    if (!images.length) {
+    if (!urls.length) {
         inner.innerHTML = `<div class="carousel-item active"><div class="placeholder-icon">🛍️</div></div>`;
         track.innerHTML = '';
         nav.style.display = 'none';
@@ -516,16 +520,16 @@ function buildCarouselSlides(images) {
     }
 
     // Build carousel slides
-    inner.innerHTML = images.map((img, i) => `
+    inner.innerHTML = urls.map((img, i) => `
         <div class="carousel-item${i === 0 ? ' active' : ''}">
-            <img src="${img}" alt="product image ${i + 1}" onerror="this.parentElement.innerHTML='🛍️'">
+            <img src="${img}" alt="product image ${i + 1}" onerror="this.style.display='none';this.parentElement.innerHTML='<div class=\'placeholder-icon\'>🛍️</div>'">
         </div>
     `).join('');
 
     // Build thumbnails
-    track.innerHTML = images.map((img, i) => `
+    track.innerHTML = urls.map((img, i) => `
         <div class="pd-thumb${i === 0 ? ' active' : ''}" data-idx="${i}">
-            <img src="${img}" alt="thumb ${i + 1}" onerror="this.src='data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 width=%2264%22 height=%2264%22><rect fill=%22%23f8f9fa%22 width=%22100%25%22 height=%22100%25%22/><text x=%2250%25%22 y=%2250%25%22 text-anchor=%22middle%22 dy=%22.3em%22>🛍️</text></svg>'">
+            <img src="${img}" alt="thumb ${i + 1}" onerror="this.parentElement.style.background='#f8f9fa'">
         </div>
     `).join('');
 
@@ -539,14 +543,14 @@ function buildCarouselSlides(images) {
     });
 
     // Show/hide navigation arrows
-    const hasMultiple = images.length > 1;
+    const hasMultiple = urls.length > 1;
     carouselEl.querySelectorAll('.carousel-control-prev,.carousel-control-next')
         .forEach(b => b.style.display = hasMultiple ? '' : 'none');
 
     // Show thumbnail navigation
     nav.style.display = 'flex';
-    document.getElementById('pdThumbPrev').style.display = images.length > MAX_VISIBLE_THUMBS ? '' : 'none';
-    document.getElementById('pdThumbNext').style.display = images.length > MAX_VISIBLE_THUMBS ? '' : 'none';
+    document.getElementById('pdThumbPrev').style.display = urls.length > MAX_VISIBLE_THUMBS ? '' : 'none';
+    document.getElementById('pdThumbNext').style.display = urls.length > MAX_VISIBLE_THUMBS ? '' : 'none';
     updateThumbScroll();
 
     // Initialize Bootstrap carousel
@@ -555,9 +559,6 @@ function buildCarouselSlides(images) {
         wrap: true,
         interval: false
     });
-
-    // Ensure we start at first slide
-    setTimeout(() => carousel.to(0), 50);
 
     // Reattach slide event listener
     carouselEl.removeEventListener('slid.bs.carousel', onCarouselSlid);

@@ -324,6 +324,7 @@ def _parse_date(iso):
         return None
 
 
+@rider_bp.route('/api/deliveries/<order_id>/status', methods=['POST'])
 @rider_required
 def api_update_delivery_status(order_id):
     rider_id = session['user']['id']

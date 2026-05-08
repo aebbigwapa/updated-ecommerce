@@ -423,11 +423,23 @@ def serialize_cart_item(item: Dict[str, Any]) -> Dict[str, Any]:
     qty = int(item.get("quantity") or 0)
     subtotal = round(price_val * qty, 2)
 
+    # Resolve image: check product_images nested under product,
+    # then fall back to top-level product_images on the cart row
+    image = None
+    if isinstance(product, dict):
+        image = _primary_image_url(product)
+    if not image:
+        # Supabase sometimes flattens nested relations to the top-level row
+        top_images = item.get("product_images") or []
+        if top_images:
+            primary = next((img for img in top_images if img.get("is_primary")), None) or top_images[0]
+            image = primary.get("image_url") if isinstance(primary, dict) else None
+
     return {
         "id":           item.get("id"),
         "product_id":   item.get("product_id"),
         "product_name": product.get("name") or "",
-        "image":        _primary_image_url(product) if isinstance(product, dict) else None,
+        "image":        image,
         "variant_id":   item.get("variant_id"),
         "variant":      variant.get("value") if isinstance(variant, dict) else None,
         "price":        price_val,

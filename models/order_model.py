@@ -95,7 +95,7 @@ class OrderModel:
         return orders
     
     def create(self, order_data, items_data):
-        """Create a new order with items and reserve stock"""
+        """Create a new order with items and immediately deduct stock"""
         try:
             # Validate stock availability before creating order
             for item_data in items_data:
@@ -110,13 +110,12 @@ class OrderModel:
             order_result = self.supabase.table('orders').insert(order_data).execute()
             order = order_result.data[0]
             
-            # Create order items and reserve stock
+            # Create order items and immediately deduct stock
             order_id = order['id']
             for item_data in items_data:
                 item_data['order_id'] = order_id
                 self.supabase.table('order_items').insert(item_data).execute()
-                # Reserve stock (reduce available but don't deduct from total yet)
-                self._reserve_stock(item_data['product_id'], item_data.get('variant_id'), int(item_data['quantity']))
+                self._deduct_stock(item_data['product_id'], item_data.get('variant_id'), int(item_data['quantity']))
             
             return order
         except Exception as e:
@@ -148,13 +147,6 @@ class OrderModel:
         }
         if valid_next.get(current_status) != new_status:
             return None
-        
-        # When seller approves order (changes to 'processing'), deduct stock
-        if current_status == 'pending' and new_status == 'processing':
-            # Get order items to deduct stock
-            items_result = self.supabase.table('order_items').select('product_id, variant_id, quantity').eq('order_id', order_id).execute()
-            for item in items_result.data or []:
-                self._deduct_stock(item['product_id'], item.get('variant_id'), int(item['quantity']))
         
         return self.update_status(order_id, new_status)
 
@@ -226,82 +218,41 @@ class OrderModel:
             variant = self.supabase.table('product_variants').select('stock').eq('id', variant_id).limit(1).execute()
             if not variant.data:
                 return False
-            available = int(variant.data[0].get('stock', 0))
-        else:
-            # Sum all variant stocks as source of truth
-            variants = self.supabase.table('product_variants').select('stock').eq('product_id', product_id).execute()
-            if variants.data:
-                available = sum(int(v.get('stock', 0)) for v in variants.data)
-            else:
-                product = self.supabase.table('products').select('total_stock').eq('id', product_id).limit(1).execute()
-                if not product.data:
-                    return False
-                available = int(product.data[0].get('total_stock', 0))
-        return available >= quantity
-    
-    def _reserve_stock(self, product_id, variant_id, quantity):
-        """Reserve stock when order is created (don't deduct, just mark as reserved)"""
-        if variant_id:
-            # Reserve variant stock (increase reserved_stock, don't decrease stock)
-            variant = self.supabase.table('product_variants').select('stock, reserved_stock').eq('id', variant_id).limit(1).execute()
-            if variant.data:
-                current_stock = int(variant.data[0].get('stock', 0))
-                current_reserved = int(variant.data[0].get('reserved_stock', 0))
-                
-                # Check if enough stock is available (stock - reserved_stock)
-                available_stock = current_stock - current_reserved
-                if available_stock < quantity:
-                    raise Exception(f"Insufficient stock. Available: {available_stock}, Requested: {quantity}")
-                
-                # Increase reserved stock
-                new_reserved = current_reserved + quantity
-                self.supabase.table('product_variants').update({'reserved_stock': new_reserved}).eq('id', variant_id).execute()
-        
-        # Always reserve from total_stock on the product
-        product = self.supabase.table('products').select('total_stock, reserved_stock').eq('id', product_id).limit(1).execute()
-        if product.data:
-            current_total = int(product.data[0].get('total_stock', 0))
-            current_reserved = int(product.data[0].get('reserved_stock', 0))
-            
-            # Check if enough total stock is available
-            available_total = current_total - current_reserved
-            if available_total < quantity:
-                raise Exception(f"Insufficient total stock. Available: {available_total}, Requested: {quantity}")
-            
-            # Increase reserved stock
-            new_reserved = current_reserved + quantity
-            self.supabase.table('products').update({'reserved_stock': new_reserved}).eq('id', product_id).execute()
-    
+            return int(variant.data[0].get('stock', 0)) >= quantity
+        variants = self.supabase.table('product_variants').select('stock').eq('product_id', product_id).execute()
+        if variants.data:
+            return sum(int(v.get('stock', 0)) for v in variants.data) >= quantity
+        product = self.supabase.table('products').select('total_stock').eq('id', product_id).limit(1).execute()
+        if not product.data:
+            return False
+        return int(product.data[0].get('total_stock', 0)) >= quantity
+
     def _deduct_stock(self, product_id, variant_id, quantity):
-        """Actually deduct stock when seller approves the order"""
+        """Deduct stock immediately on checkout."""
         if variant_id:
-            # Deduct from variant stock and reserved_stock
-            variant = self.supabase.table('product_variants').select('stock, reserved_stock').eq('id', variant_id).limit(1).execute()
+            # Deduct from the specific variant
+            variant = self.supabase.table('product_variants').select('stock').eq('id', variant_id).limit(1).execute()
             if variant.data:
-                current_stock = int(variant.data[0].get('stock', 0))
-                current_reserved = int(variant.data[0].get('reserved_stock', 0))
-                
-                # Decrease both stock and reserved_stock
-                new_stock = max(0, current_stock - quantity)
-                new_reserved = max(0, current_reserved - quantity)
-                self.supabase.table('product_variants').update({
-                    'stock': new_stock,
-                    'reserved_stock': new_reserved
-                }).eq('id', variant_id).execute()
-        
-        # Deduct from product total_stock and reserved_stock
-        product = self.supabase.table('products').select('total_stock, reserved_stock').eq('id', product_id).limit(1).execute()
-        if product.data:
-            current_total = int(product.data[0].get('total_stock', 0))
-            current_reserved = int(product.data[0].get('reserved_stock', 0))
-            
-            # Decrease both total_stock and reserved_stock
-            new_total = max(0, current_total - quantity)
-            new_reserved = max(0, current_reserved - quantity)
-            self.supabase.table('products').update({
-                'total_stock': new_total,
-                'reserved_stock': new_reserved
-            }).eq('id', product_id).execute()
+                new_stock = max(0, int(variant.data[0].get('stock', 0)) - quantity)
+                self.supabase.table('product_variants').update({'stock': new_stock}).eq('id', variant_id).execute()
+        else:
+            # No variant selected — deduct from variants proportionally (largest stock first)
+            variants = self.supabase.table('product_variants').select('id, stock').eq('product_id', product_id).order('stock', desc=True).execute()
+            if variants.data:
+                remaining = quantity
+                for v in variants.data:
+                    if remaining <= 0:
+                        break
+                    v_stock = int(v.get('stock', 0))
+                    deduct = min(remaining, v_stock)
+                    self.supabase.table('product_variants').update({'stock': v_stock - deduct}).eq('id', v['id']).execute()
+                    remaining -= deduct
+
+        # Always sync total_stock on the product row
+        variants = self.supabase.table('product_variants').select('stock').eq('product_id', product_id).execute()
+        if variants.data:
+            new_total = sum(int(v.get('stock', 0)) for v in variants.data)
+            self.supabase.table('products').update({'total_stock': new_total}).eq('id', product_id).execute()
     
     def _finalize_delivery(self, order_id):
         """On delivery: record rider earnings and admin commission."""
@@ -344,27 +295,32 @@ class OrderModel:
         if order_data.get('status') not in ['pending', 'processing']:
             return None
         
-        # Release reserved stock for cancelled order
+        # Restore stock for cancelled order
         items = self.supabase.table('order_items').select('product_id, variant_id, quantity').eq('order_id', order_id).execute()
         for item in (items.data or []):
             qty = int(item.get('quantity', 0))
             variant_id = item.get('variant_id')
             product_id = item.get('product_id')
-            
+
             if variant_id:
-                # Release variant reserved stock
-                variant = self.supabase.table('product_variants').select('reserved_stock').eq('id', variant_id).limit(1).execute()
+                # Restore to the specific variant
+                variant = self.supabase.table('product_variants').select('stock').eq('id', variant_id).limit(1).execute()
                 if variant.data:
-                    current_reserved = int(variant.data[0].get('reserved_stock', 0))
-                    new_reserved = max(0, current_reserved - qty)
-                    self.supabase.table('product_variants').update({'reserved_stock': new_reserved}).eq('id', variant_id).execute()
-            
-            # Release product total reserved stock
-            product = self.supabase.table('products').select('reserved_stock').eq('id', product_id).limit(1).execute()
-            if product.data:
-                current_reserved = int(product.data[0].get('reserved_stock', 0))
-                new_reserved = max(0, current_reserved - qty)
-                self.supabase.table('products').update({'reserved_stock': new_reserved}).eq('id', product_id).execute()
+                    new_stock = int(variant.data[0].get('stock', 0)) + qty
+                    self.supabase.table('product_variants').update({'stock': new_stock}).eq('id', variant_id).execute()
+            else:
+                # No variant — restore to first variant (or distribute proportionally)
+                variants = self.supabase.table('product_variants').select('id, stock').eq('product_id', product_id).limit(1).execute()
+                if variants.data:
+                    v = variants.data[0]
+                    new_stock = int(v.get('stock', 0)) + qty
+                    self.supabase.table('product_variants').update({'stock': new_stock}).eq('id', v['id']).execute()
+
+            # Sync total_stock on the product row
+            variants = self.supabase.table('product_variants').select('stock').eq('product_id', product_id).execute()
+            if variants.data:
+                new_total = sum(int(v.get('stock', 0)) for v in variants.data)
+                self.supabase.table('products').update({'total_stock': new_total}).eq('id', product_id).execute()
         
         # Update order status to cancelled (we need to add this status to schema)
         result = self.supabase.table('orders').update({'status': 'cancelled'}).eq('id', order_id).execute()
@@ -450,7 +406,7 @@ class OrderModel:
     # Cart operations
     def get_cart_items(self, user_id):
         result = self.supabase.table('cart_items').select(
-            '*, product:products(*, product_images(*))'
+            '*, product:products(*, product_variants(*), product_images(*))'
         ).eq('user_id', user_id).order('created_at', desc=True).execute()
         items = result.data if result.data else []
         return self._attach_variants(items)
