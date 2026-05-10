@@ -390,33 +390,57 @@ function updateCartSummary(cart) {
 
 // ── Checkout page ─────────────────────────────────────────────
 function loadCheckout() {
+    const isBuyNow = (window.CHECKOUT_MODE === 'buy_now');
+
+    if (isBuyNow) {
+        fetch('/buyer/api/buy-now')
+            .then(r => r.json())
+            .then(res => {
+                const item = res && res.data && res.data.item ? res.data.item : null;
+                if (!item) { window.location.href = '/buyer/market'; return; }
+                _renderCheckoutItems([item]);
+                loadAddressOptions();
+            })
+            .catch(() => { window.location.href = '/buyer/market'; });
+        return;
+    }
+
+    // Cart checkout — show only server-side selected items
     API.buyer.getCart().then(raw => {
-        const cart = Array.isArray(raw) ? raw : (raw && raw.items ? raw.items : []);
-        if (!cart.length) { window.location.href = '/buyer/cart'; return; }
-
-        const list = document.getElementById('checkoutItems');
-        if (list) {
-            list.innerHTML = cart.map(i => {
-                const imgSrc = i.image;
-                const imgHtml = imgSrc
-                    ? `<img src="${imgSrc}" style="width:36px;height:36px;object-fit:cover;border-radius:6px;flex-shrink:0" onerror="this.style.display='none'">`
-                    : `<span style="font-size:20px">🛍️</span>`;
-                return `
-                <div class="d-flex align-items-center justify-content-between mb-2 gap-2" style="font-size:13px">
-                    <div class="d-flex align-items-center gap-2">
-                        ${imgHtml}
-                        <span>${i.product_name || i.name || 'Product'} × ${i.quantity}</span>
-                    </div>
-                    <span style="font-weight:600;white-space:nowrap">${formatCurrency(i.subtotal)}</span>
-                </div>`;
-            }).join('');
+        const all      = Array.isArray(raw) ? raw : (raw && raw.items ? raw.items : []);
+        const selected = all.filter(i => i.is_selected);
+        if (!selected.length) {
+            // No items selected — send back to cart
+            window.location.href = '/buyer/cart';
+            return;
         }
-
-        updateCartSummary(cart.map(i => ({ price: Number(i.price || i.price_snapshot || 0), qty: Number(i.quantity || 0) })));
+        _renderCheckoutItems(selected);
         loadAddressOptions();
     }).catch(() => {
         showToast('Failed to load checkout items.', true);
     });
+}
+
+function _renderCheckoutItems(items) {
+    const list = document.getElementById('checkoutItems');
+    if (list) {
+        list.innerHTML = items.map(i => {
+            const imgSrc = i.image;
+            const imgHtml = imgSrc
+                ? `<img src="${imgSrc}" style="width:36px;height:36px;object-fit:cover;border-radius:6px;flex-shrink:0" onerror="this.style.display='none'">`
+                : `<span style="font-size:20px">🛍️</span>`;
+            const label = i.variant_label ? ` (${i.variant_label})` : '';
+            return `
+            <div class="d-flex align-items-center justify-content-between mb-2 gap-2" style="font-size:13px">
+                <div class="d-flex align-items-center gap-2">
+                    ${imgHtml}
+                    <span>${i.product_name || i.name || 'Product'}${label} × ${i.quantity}</span>
+                </div>
+                <span style="font-weight:600;white-space:nowrap">${formatCurrency(i.subtotal)}</span>
+            </div>`;
+        }).join('');
+    }
+    updateCartSummary(items.map(i => ({ price: Number(i.unit_price || i.price || i.price_snapshot || 0), qty: Number(i.quantity || 0) })));
 }
 
 async function loadAddressOptions() {
@@ -456,20 +480,53 @@ async function placeOrder() {
     if (!payment)   { showToast('Please select a payment method.', true); return; }
 
     const btn = document.getElementById('placeOrderBtn');
+    // Disable immediately to prevent double submission
     if (btn) { btn.disabled = true; btn.textContent = 'Placing Order...'; }
 
-    const res = await API.buyer.checkout({
-        address_id: addressId,
-        payment_method: payment,
-    }).catch(() => ({ error: 'Network error.' }));
+    const isBuyNow = (window.CHECKOUT_MODE === 'buy_now');
 
-    const orderId = (res && res.order && res.order.order_id) ? res.order.order_id : res.order_id;
+    // Generate idempotency key once per checkout session (stored in sessionStorage)
+    let idempotencyKey = sessionStorage.getItem('checkout_idempotency_key');
+    if (!idempotencyKey) {
+        idempotencyKey = 'ck-' + Date.now() + '-' + Math.random().toString(36).slice(2);
+        sessionStorage.setItem('checkout_idempotency_key', idempotencyKey);
+    }
+
+    let res;
+    if (isBuyNow) {
+        res = await fetch('/buyer/api/buy-now/checkout', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                address_id:       addressId,
+                payment_method:   payment,
+                idempotency_key:  idempotencyKey,
+            }),
+        }).then(r => r.json()).catch(() => ({ error: 'Network error.' }));
+    } else {
+        res = await API.buyer.checkout({
+            address_id:      addressId,
+            payment_method:  payment,
+            idempotency_key: idempotencyKey,
+        }).catch(() => ({ error: 'Network error.' }));
+    }
+
+    // Handle both envelope shapes
+    const orderObj = (res && res.data && res.data.order) ? res.data.order
+                   : (res && res.order) ? res.order
+                   : null;
+    const orderId = orderObj ? (orderObj.order_id || orderObj.id) : (res && res.order_id);
+
     if (orderId) {
+        // Clear idempotency key on success so a new checkout gets a fresh key
+        sessionStorage.removeItem('checkout_idempotency_key');
         updateCartBadge();
         window.location.href = `/buyer/order_summary?id=${orderId}`;
     } else {
-        showToast(res.error || 'Failed to place order.', true);
-        if (btn) { btn.disabled = false; btn.textContent = 'Place Order'; }
+        const errMsg = (res && (res.error || (res.data && res.data.error))) || 'Failed to place order.';
+        showToast(errMsg, true);
+        // Re-enable button so user can correct and retry
+        if (btn) { btn.disabled = false; btn.textContent = 'Place Order →'; }
     }
 }
 

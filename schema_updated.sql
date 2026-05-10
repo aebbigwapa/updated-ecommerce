@@ -771,3 +771,10 @@ from orders o
 join order_items oi on o.id = oi.order_id
 join products p on oi.product_id = p.id
 group by p.seller_id, o.id, o.status, o.created_at, o.total_amount;
+
+-- ============================================
+-- MIGRATION: Add sent_at to email_otps
+-- Run this on existing databases
+-- ============================================
+alter table email_otps
+    add column if not exists sent_at timestamptz not null default now();

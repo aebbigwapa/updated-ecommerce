@@ -2,15 +2,11 @@ from supabase import create_client
 import os
 
 class OrderModel:
-    _supabase = None
-
     def __init__(self):
-        if OrderModel._supabase is None:
-            OrderModel._supabase = create_client(
-                os.getenv('SUPABASE_URL'),
-                os.getenv('SUPABASE_SERVICE_ROLE_KEY')
-            )
-        self.supabase = OrderModel._supabase
+        self.supabase = create_client(
+            os.getenv('SUPABASE_URL'),
+            os.getenv('SUPABASE_SERVICE_ROLE_KEY')
+        )
     
     def _attach_variants(self, items):
         """Fetch variant data separately and attach to order items."""
@@ -96,31 +92,67 @@ class OrderModel:
             order['total'] = order.get('total_amount', 0)
         return orders
     
-    def create(self, order_data, items_data):
-        """Create a new order with items and immediately deduct stock"""
+    def create(self, order_data, items_data, cart_item_ids=None, idempotency_key=None):
+        """Create order, deduct stock, then remove cart items — all or nothing.
+
+        cart_item_ids: list of cart_items.id to delete after successful order.
+        idempotency_key: if provided, checked first; returns existing order on replay.
+        """
+        # --- Idempotency check: return previous result without re-processing ---
+        if idempotency_key:
+            existing = self.find_order_by_idempotency_key(idempotency_key)
+            if existing:
+                return existing
+            order_data = {**order_data, 'idempotency_key': idempotency_key}
+
+        order_id = None
         try:
-            # Validate stock availability before creating order
+            # 1. Validate all stock upfront — no DB writes yet
             for item_data in items_data:
                 product_id = item_data['product_id']
                 variant_id = item_data.get('variant_id')
-                quantity = int(item_data['quantity'])
-                
+                quantity   = int(item_data['quantity'])
                 if not self._check_stock_availability(product_id, variant_id, quantity):
                     raise Exception(f"Insufficient stock for product {product_id}")
-            
-            # Create order
+
+            # 2. Insert the order header
             order_result = self.supabase.table('orders').insert(order_data).execute()
-            order = order_result.data[0]
-            
-            # Create order items and immediately deduct stock
+            if not order_result.data:
+                raise Exception('Failed to create order record')
+            order    = order_result.data[0]
             order_id = order['id']
+
+            # 3. Insert all order items (no stock deduction yet)
             for item_data in items_data:
-                item_data['order_id'] = order_id
-                self.supabase.table('order_items').insert(item_data).execute()
-                self._deduct_stock(item_data['product_id'], item_data.get('variant_id'), int(item_data['quantity']))
-            
+                item_payload = {k: v for k, v in item_data.items()}
+                item_payload['order_id'] = order_id
+                item_result = self.supabase.table('order_items').insert(item_payload).execute()
+                if not item_result.data:
+                    raise Exception(f"Failed to save order item for product {item_data['product_id']}")
+
+            # 4. All items saved — deduct stock
+            for item_data in items_data:
+                self._deduct_stock(
+                    item_data['product_id'],
+                    item_data.get('variant_id'),
+                    int(item_data['quantity'])
+                )
+
+            # 5. Remove the checked-out cart items (only after order + stock are confirmed)
+            if cart_item_ids:
+                for cid in cart_item_ids:
+                    self.supabase.table('cart_items').delete().eq('id', cid).execute()
+
             return order
+
         except Exception as e:
+            # Roll back: delete order items and order header if they were created
+            if order_id:
+                try:
+                    self.supabase.table('order_items').delete().eq('order_id', order_id).execute()
+                    self.supabase.table('orders').delete().eq('id', order_id).execute()
+                except Exception:
+                    pass
             raise e
     
     def update_status(self, order_id, new_status):
@@ -420,6 +452,37 @@ class OrderModel:
         else:
             query = query.is_('variant_id', 'null')
         result = query.limit(1).execute()
+        return result.data[0] if result.data else None
+
+    # ------------------------------------------------------------------
+    # Cart selection helpers
+    # ------------------------------------------------------------------
+
+    def set_cart_item_selected(self, user_id, item_id, selected: bool):
+        """Toggle selection state of a single cart item (server-side)."""
+        result = self.supabase.table('cart_items') \
+            .update({'is_selected': selected}) \
+            .eq('id', item_id).eq('user_id', user_id).execute()
+        return result.data[0] if result.data else None
+
+    def set_all_cart_items_selected(self, user_id, selected: bool):
+        """Select or deselect every item in the user's cart."""
+        self.supabase.table('cart_items') \
+            .update({'is_selected': selected}) \
+            .eq('user_id', user_id).execute()
+
+    def get_selected_cart_items(self, user_id):
+        """Return only the items the user has marked for checkout."""
+        result = self.supabase.table('cart_items').select(
+            '*, product:products(*, product_variants(*), product_images(*))'
+        ).eq('user_id', user_id).eq('is_selected', True).execute()
+        items = result.data if result.data else []
+        return self._attach_variants(items)
+
+    def find_order_by_idempotency_key(self, key: str):
+        """Return an existing order if this idempotency key was already used."""
+        result = self.supabase.table('orders') \
+            .select('*').eq('idempotency_key', key).limit(1).execute()
         return result.data[0] if result.data else None
 
     def add_or_increment_cart_item(self, user_id, product_id, variant_id, quantity, price_snapshot):

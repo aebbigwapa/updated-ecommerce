@@ -64,12 +64,47 @@
             </div>
             <div class="form-group" id="otpGroup" style="display:none">
                 <label>Enter OTP</label>
-                <input type="text" id="otp" placeholder="6-digit code" maxlength="6">
-                <div id="otpTimer" style="font-size:12px;color:var(--pink);margin-top:4px"></div>
+                <input type="text" id="otp" placeholder="6-digit code" maxlength="6" inputmode="numeric" pattern="[0-9]{6}" autocomplete="one-time-code">
+                <div id="otpTimer" class="otp-timer"></div>
+                <div class="otp-resend-row">
+                    <button type="button" id="resendOtpBtn" class="btn-resend" disabled onclick="resendOTP()">Resend Code</button>
+                    <span id="resendCountdown" class="resend-countdown"></span>
+                </div>
+                <div id="otpAttemptsMsg" class="otp-attempts-msg"></div>
             </div>
             <div class="form-group">
-                <label>Phone Number</label>
-                <input type="tel" id="phone" placeholder="+63 912 345 6789" required>
+                <label for="phone">Phone Number <span style="color:var(--pink)">*</span></label>
+                <div class="phone-wrap">
+                    <select id="phoneCountry" class="phone-country"
+                            aria-label="Country code"
+                            aria-describedby="phoneHint">
+                        <option value="+63" selected>🇵🇭 +63</option>
+                        <option value="+1">🇺🇸 +1</option>
+                        <option value="+44">🇬🇧 +44</option>
+                        <option value="+61">🇦🇺 +61</option>
+                        <option value="+81">🇯🇵 +81</option>
+                        <option value="+86">🇨🇳 +86</option>
+                        <option value="+91">🇮🇳 +91</option>
+                        <option value="+49">🇩🇪 +49</option>
+                        <option value="+33">🇫🇷 +33</option>
+                        <option value="+7">🇷🇺 +7</option>
+                        <option value="+55">🇧🇷 +55</option>
+                        <option value="+65">🇸🇬 +65</option>
+                        <option value="+60">🇲🇾 +60</option>
+                        <option value="+66">🇹🇭 +66</option>
+                        <option value="+82">🇰🇷 +82</option>
+                        <option value="+971">🇦🇪 +971</option>
+                        <option value="+966">🇸🇦 +966</option>
+                    </select>
+                    <input type="tel" id="phone" class="phone-number"
+                           placeholder="9XXXXXXXXX" required
+                           autocomplete="tel"
+                           inputmode="numeric"
+                           aria-label="Phone number"
+                           aria-describedby="phoneHint"
+                           aria-required="true">
+                </div>
+                <div class="field-hint" id="phoneHint" role="status" aria-live="polite"></div>
             </div>
             <div class="form-group">
                 <label>Gender <span style="color:var(--pink)">*</span></label>
@@ -87,11 +122,18 @@
             <div class="form-group">
                 <label>Password</label>
                 <div class="pw-wrap">
-                    <input type="password" id="password" placeholder="Create a strong password" required>
+                    <input type="password" id="password" placeholder="Create a strong password" required autocomplete="new-password">
                     <span class="pw-toggle" id="pwToggle">👁️</span>
                 </div>
                 <div class="strength-bar"><div class="strength-fill" id="strengthFill"></div></div>
                 <div class="strength-text" id="strengthText"></div>
+                <ul class="pw-rules" id="pwRules">
+                    <li id="rule-len">At least 8 characters</li>
+                    <li id="rule-upper">At least one uppercase letter (A–Z)</li>
+                    <li id="rule-lower">At least one lowercase letter (a–z)</li>
+                    <li id="rule-digit">At least one digit (0–9)</li>
+                    <li id="rule-special">At least one special character (!@#$%^&amp;* etc.)</li>
+                </ul>
             </div>
             <div class="form-group">
                 <label>Confirm Password</label>

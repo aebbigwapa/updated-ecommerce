@@ -3,15 +3,11 @@ import os
 from datetime import datetime, timezone
 
 class ApplicationModel:
-    _supabase = None
-
     def __init__(self):
-        if ApplicationModel._supabase is None:
-            ApplicationModel._supabase = create_client(
-                os.getenv('SUPABASE_URL'),
-                os.getenv('SUPABASE_SERVICE_ROLE_KEY')
-            )
-        self.supabase = ApplicationModel._supabase
+        self.supabase = create_client(
+            os.getenv('SUPABASE_URL'),
+            os.getenv('SUPABASE_SERVICE_ROLE_KEY')
+        )
     
     def get_by_user_id(self, user_id):
         """Get application by user ID"""

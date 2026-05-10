@@ -17,11 +17,6 @@ def admin_required(f):
     return decorated
 
 admin_bp = Blueprint('admin', __name__, url_prefix='/admin')
-user_model = UserModel()
-app_model = ApplicationModel()
-order_model = OrderModel()
-product_model = ProductModel()
-auth_service = AuthService()
 
 @admin_bp.route('/')
 @admin_required
@@ -31,13 +26,13 @@ def dashboard():
 @admin_bp.route('/applications')
 @admin_required
 def applications():
-    apps = app_model.get_pending()
+    apps = ApplicationModel().get_pending()
     return render_template('admin/applications.html', applications=apps)
 
 @admin_bp.route('/users')
 @admin_required
 def users():
-    all_users = user_model.get_all()
+    all_users = UserModel().get_all()
     return render_template('admin/users.html', users=all_users)
 
 @admin_bp.route('/settings')
@@ -48,31 +43,31 @@ def settings():
 @admin_bp.route('/sellers')
 @admin_required
 def sellers():
-    sellers = user_model.get_by_role('seller')
+    sellers = UserModel().get_by_role('seller')
     return render_template('admin/sellers.html', sellers=sellers)
 
 @admin_bp.route('/riders')
 @admin_required
 def riders():
-    riders = user_model.get_by_role('rider')
+    riders = UserModel().get_by_role('rider')
     return render_template('admin/riders.html', riders=riders)
 
 @admin_bp.route('/products')
 @admin_required
 def products():
-    products = product_model.get_all()
+    products = ProductModel().get_all()
     return render_template('admin/products.html', products=products)
 
 @admin_bp.route('/orders')
 @admin_required
 def orders():
-    orders = order_model.get_all()
+    orders = OrderModel().get_all()
     return render_template('admin/orders.html', orders=orders)
 
 @admin_bp.route('/reports')
 @admin_required
 def reports():
-    stats = auth_service.get_admin_stats()
+    stats = AuthService().get_admin_stats()
     return render_template('admin/reports.html', stats=stats)
 
 @admin_bp.route('/messages')
@@ -84,13 +79,13 @@ def messages():
 @admin_bp.route('/api/applications', methods=['GET'])
 @admin_required
 def api_get_applications():
-    apps = app_model.get_all()
+    apps = ApplicationModel().get_all()
     return jsonify(apps)
 
 @admin_bp.route('/api/applications/<app_id>', methods=['GET'])
 @admin_required
 def api_get_application(app_id):
-    app = app_model.get_by_id(app_id)
+    app = ApplicationModel().get_by_id(app_id)
     if not app:
         return jsonify({'error': 'Not found'}), 404
     return jsonify(app)
@@ -101,17 +96,18 @@ def update_application_status(app_id):
     data = request.get_json() or {}
     status = data.get('status')
     notes = data.get('notes', '')
-    
+
     if status not in ('approved', 'rejected'):
         return jsonify({'error': 'Invalid status'}), 400
 
     try:
+        app_model = ApplicationModel()
         application = app_model.get_by_id(app_id)
         if not application:
             return jsonify({'error': 'Application not found'}), 404
         app_model.update_status(app_id, status, reject_reason=notes if status == 'rejected' else None)
         if status == 'approved':
-            user_model.update_role(application['user_id'], application['role'])
+            UserModel().update_role(application['user_id'], application['role'])
         return jsonify({'success': True, 'message': 'Status updated'})
     except Exception as e:
         return jsonify({'error': str(e)}), 500
@@ -120,7 +116,7 @@ def update_application_status(app_id):
 @admin_required
 def approve_seller(user_id):
     try:
-        user_model.update_role(user_id, 'seller')
+        UserModel().update_role(user_id, 'seller')
         return jsonify({'success': True, 'message': 'Seller approved'})
     except Exception as e:
         return jsonify({'error': str(e)}), 500
@@ -129,7 +125,7 @@ def approve_seller(user_id):
 @admin_required
 def reject_seller(user_id):
     try:
-        user_model.update_role(user_id, 'user')
+        UserModel().update_role(user_id, 'user')
         return jsonify({'success': True, 'message': 'Seller rejected'})
     except Exception as e:
         return jsonify({'error': str(e)}), 500
@@ -138,13 +134,13 @@ def reject_seller(user_id):
 @admin_required
 def get_products():
     status = request.args.get('status', '').strip() or None
-    products = product_model.get_all(status=status)
+    products = ProductModel().get_all(status=status)
     return jsonify(products)
 
 @admin_bp.route('/api/products/<product_id>', methods=['GET'])
 @admin_required
 def get_product(product_id):
-    product = product_model.get_by_id(product_id)
+    product = ProductModel().get_by_id(product_id)
     if not product:
         return jsonify({'error': 'Product not found'}), 404
     return jsonify(product)
@@ -160,7 +156,7 @@ def update_product_status(product_id):
     if status == 'rejected' and not reason:
         return jsonify({'error': 'Rejection reason is required'}), 400
     try:
-        updated = product_model.update_status(product_id, status, session['user']['id'], reason)
+        updated = ProductModel().update_status(product_id, status, session['user']['id'], reason)
         if not updated:
             return jsonify({'error': 'Product not found'}), 404
         return jsonify({'success': True, 'product': updated})
@@ -171,7 +167,7 @@ def update_product_status(product_id):
 @admin_required
 def api_admin_orders():
     status = request.args.get('status', '').strip() or None
-    orders = order_model.get_all()
+    orders = OrderModel().get_all()
     if status:
         orders = [o for o in orders if o.get('status') == status]
     return jsonify(orders)
@@ -184,7 +180,7 @@ def api_admin_order_status(order_id):
     rider_id = data.get('rider_id')
     if not status:
         return jsonify({'error': 'Status is required'}), 400
-    updated = order_model.update_status_for_admin(order_id, status, rider_id)
+    updated = OrderModel().update_status_for_admin(order_id, status, rider_id)
     if not updated:
         return jsonify({'error': 'Order not found or invalid status'}), 404
     return jsonify({'success': True, 'order': updated})
@@ -194,11 +190,11 @@ def api_admin_order_status(order_id):
 def api_admin_cancel_order(order_id):
     """Admin can cancel any order and restore stock"""
     try:
-        cancelled_order = order_model.cancel_order(order_id, is_admin=True)
+        cancelled_order = OrderModel().cancel_order(order_id, is_admin=True)
         if cancelled_order:
             return jsonify({
-                'success': True, 
-                'message': 'Order cancelled successfully by admin. Stock has been restored.', 
+                'success': True,
+                'message': 'Order cancelled successfully by admin. Stock has been restored.',
                 'order': cancelled_order
             })
         else:
@@ -213,23 +209,23 @@ def api_admin_cancel_order(order_id):
 def api_admin_stats():
     """Get comprehensive admin statistics"""
     try:
-        all_orders = order_model.get_all()
+        all_orders = OrderModel().get_all()
         stats = {
-            'total_orders':    len(all_orders),
+            'total_orders':     len(all_orders),
             'delivered_orders': len([o for o in all_orders if o.get('status') == 'delivered']),
-            'pending_orders':  len([o for o in all_orders if o.get('status') == 'pending']),
+            'pending_orders':   len([o for o in all_orders if o.get('status') == 'pending']),
             'cancelled_orders': len([o for o in all_orders if o.get('status') == 'cancelled']),
-            'total_revenue':   sum(float(o.get('total_amount', 0)) for o in all_orders if o.get('status') == 'delivered'),
-            'pending_revenue': sum(float(o.get('total_amount', 0)) for o in all_orders if o.get('status') in ['pending', 'processing', 'ready_for_pickup', 'in_transit'])
+            'total_revenue':    sum(float(o.get('total_amount', 0)) for o in all_orders if o.get('status') == 'delivered'),
+            'pending_revenue':  sum(float(o.get('total_amount', 0)) for o in all_orders if o.get('status') in ['pending', 'processing', 'ready_for_pickup', 'in_transit'])
         }
-        all_users = user_model.get_all()
+        all_users = UserModel().get_all()
         stats.update({
             'total_users':   len(all_users),
             'total_sellers': len([u for u in all_users if u.get('role') == 'seller']),
             'total_buyers':  len([u for u in all_users if u.get('role') == 'buyer']),
             'total_riders':  len([u for u in all_users if u.get('role') == 'rider'])
         })
-        all_products = product_model.get_all()
+        all_products = ProductModel().get_all()
         stats.update({
             'total_products':   len(all_products),
             'active_products':  len([p for p in all_products if p.get('status') == 'active']),
@@ -248,8 +244,8 @@ def api_admin_dashboard():
     import os
     sb = create_client(os.getenv('SUPABASE_URL'), os.getenv('SUPABASE_SERVICE_ROLE_KEY'))
 
-    all_orders  = order_model.get_all()
-    all_users   = user_model.get_all()
+    all_orders  = OrderModel().get_all()
+    all_users   = UserModel().get_all()
     delivered   = [o for o in all_orders if o.get('status') == 'delivered']
     total_rev   = sum(float(o.get('total_amount', 0)) for o in delivered)
 
@@ -292,7 +288,7 @@ def api_admin_earnings():
     rates = {r['key']: r['value'] for r in (settings.data or [])}
     commission_rate = float(rates.get('commission_rate', 5)) / 100
 
-    all_orders = order_model.get_all()
+    all_orders = OrderModel().get_all()
     delivered  = [o for o in all_orders if o.get('status') == 'delivered']
 
     now         = datetime.now(timezone.utc)
@@ -349,7 +345,7 @@ def api_admin_sales_analytics():
     """Sales chart data (daily/weekly/monthly) from delivered orders."""
     from datetime import datetime, timedelta
     period = request.args.get('period', 'daily')
-    all_orders = order_model.get_all()
+    all_orders = OrderModel().get_all()
     delivered  = [o for o in all_orders if o.get('status') == 'delivered']
     now = datetime.now()
     data = []
@@ -388,7 +384,7 @@ def api_admin_sales_analytics():
 def api_admin_recent_orders():
     """Recent orders with buyer/seller/rider info."""
     limit  = int(request.args.get('limit', 10))
-    orders = order_model.get_all()
+    orders = OrderModel().get_all()
     recent = sorted(orders, key=lambda x: x.get('created_at', ''), reverse=True)[:limit]
     result = []
     for o in recent:

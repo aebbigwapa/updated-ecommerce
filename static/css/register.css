@@ -234,3 +234,150 @@ input:focus, textarea:focus, select:focus {
     .form-row { grid-template-columns: 1fr; }
     .step-label { font-size: 10px; }
 }
+
+/* ── Phone field ── */
+.phone-wrap {
+    display: flex;
+    gap: 8px;
+}
+
+.phone-country {
+    width: auto;
+    min-width: 110px;
+    flex-shrink: 0;
+    padding: 11px 10px;
+    font-size: 13px;
+}
+
+.phone-number {
+    flex: 1;
+}
+
+.field-hint {
+    font-size: 11px;
+    margin-top: 5px;
+    font-weight: 500;
+    min-height: 16px;
+}
+
+/* ── Password rules checklist ── */
+.pw-rules {
+    list-style: none;
+    margin-top: 8px;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+}
+
+.pw-rules li {
+    font-size: 11px;
+    color: var(--gray);
+    padding-left: 18px;
+    position: relative;
+    transition: color 0.2s;
+}
+
+.pw-rules li::before {
+    content: '○';
+    position: absolute;
+    left: 0;
+    color: var(--border);
+    font-size: 11px;
+}
+
+.pw-rules li.rule-ok {
+    color: #2ecc71;
+}
+
+.pw-rules li.rule-ok::before {
+    content: '✓';
+    color: #2ecc71;
+}
+
+.pw-rules li.rule-fail {
+    color: #e74c3c;
+}
+
+.pw-rules li.rule-fail::before {
+    content: '✗';
+    color: #e74c3c;
+}
+
+/* ── OTP timer & resend ── */
+.otp-timer {
+    font-size: 12px;
+    color: var(--pink);
+    margin-top: 5px;
+    font-weight: 500;
+    min-height: 18px;
+}
+
+.otp-resend-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-top: 8px;
+}
+
+.btn-resend {
+    padding: 7px 16px;
+    background: transparent;
+    border: 1.5px solid var(--pink-mid);
+    border-radius: 8px;
+    color: var(--pink);
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: var(--transition);
+    white-space: nowrap;
+}
+
+.btn-resend:hover:not(:disabled) {
+    background: var(--pink-pale);
+}
+
+.btn-resend:disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
+}
+
+.resend-countdown {
+    font-size: 11px;
+    color: var(--gray);
+}
+
+.otp-attempts-msg {
+    font-size: 11px;
+    margin-top: 5px;
+    font-weight: 500;
+    min-height: 16px;
+}
+
+/* Gender options */
+.gender-options {
+    display: flex;
+    gap: 12px;
+}
+
+.gender-option {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    cursor: pointer;
+}
+
+.gender-option input[type=radio] {
+    width: 16px;
+    height: 16px;
+    accent-color: var(--pink);
+    cursor: pointer;
+}
+
+.gender-label {
+    font-size: 13px;
+    color: var(--dark);
+    font-weight: 500;
+    text-transform: none;
+    letter-spacing: 0;
+}

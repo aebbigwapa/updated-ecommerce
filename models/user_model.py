@@ -2,15 +2,11 @@ from supabase import create_client
 import os
 
 class UserModel:
-    _supabase = None  # cached at class level
-
     def __init__(self):
-        if UserModel._supabase is None:
-            UserModel._supabase = create_client(
-                os.getenv('SUPABASE_URL'),
-                os.getenv('SUPABASE_SERVICE_ROLE_KEY')
-            )
-        self.supabase = UserModel._supabase
+        self.supabase = create_client(
+            os.getenv('SUPABASE_URL'),
+            os.getenv('SUPABASE_SERVICE_ROLE_KEY')
+        )
 
     def get_by_id(self, user_id):
         result = self.supabase.table('users').select('*').eq('id', user_id).limit(1).execute()

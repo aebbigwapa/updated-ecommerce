@@ -22,8 +22,11 @@
         .ct-step.done   .ct-step-circle { background:#10b981; border-color:#10b981; color:#fff; }
         .ct-step-label { font-size:11px; color:#6c757d; }
         .ct-step.active .ct-step-label  { color:#FF2BAC; font-weight:600; }
-        .ct-item { background:#fff; border:1px solid #e8e8f0; border-radius:14px; padding:16px; margin-bottom:12px; transition:box-shadow .2s; }
+
+        /* Cart item card */
+        .ct-item { background:#fff; border:1px solid #e8e8f0; border-radius:14px; padding:16px; margin-bottom:12px; transition:box-shadow .2s, border-color .2s; }
         .ct-item:hover { box-shadow:0 4px 16px rgba(0,0,0,.07); }
+        .ct-item.ct-selected { border-color:#FF2BAC; background:#fff8fd; }
         .ct-item-img { width:88px; height:88px; border-radius:10px; background:#f8f9fa; overflow:hidden; flex-shrink:0; border:1px solid #e8e8f0; display:flex; align-items:center; justify-content:center; font-size:32px; }
         .ct-item-img img { width:100%; height:100%; object-fit:cover; }
         .ct-item-name    { font-size:14px; font-weight:600; color:#1a1a3e; line-height:1.4; margin-bottom:4px; }
@@ -33,6 +36,11 @@
         .ct-stock-hint   { font-size:11px; margin-top:3px; }
         .ct-stock-max    { color:#e74c3c; }
         .ct-stock-ok     { color:#adb5bd; }
+
+        /* Checkbox */
+        .ct-check { width:20px; height:20px; accent-color:#FF2BAC; cursor:pointer; flex-shrink:0; margin-top:2px; }
+
+        /* Qty control */
         .ct-qty { display:flex; align-items:center; border:1.5px solid #e8e8f0; border-radius:8px; overflow:hidden; width:fit-content; }
         .ct-qty-btn { width:32px; height:32px; border:none; background:#f8f9fa; font-size:16px; cursor:pointer; display:flex; align-items:center; justify-content:center; transition:all .2s; color:#1a1a3e; }
         .ct-qty-btn:hover   { background:#ffe0f5; color:#FF2BAC; }
@@ -40,16 +48,34 @@
         .ct-qty-val { width:40px; text-align:center; font-size:14px; font-weight:600; color:#1a1a3e; background:#fff; border-left:1.5px solid #e8e8f0; border-right:1.5px solid #e8e8f0; padding:4px 0; }
         .ct-remove { background:none; border:none; color:#adb5bd; font-size:18px; cursor:pointer; padding:4px; transition:color .2s; line-height:1; }
         .ct-remove:hover { color:#e74c3c; }
+
+        /* Summary */
         .ct-summary { background:#fff; border:1px solid #e8e8f0; border-radius:14px; padding:22px; position:sticky; top:76px; }
         .ct-summary-title { font-size:15px; font-weight:700; color:#1a1a3e; margin-bottom:18px; padding-bottom:14px; border-bottom:1px solid #e8e8f0; }
         .ct-summary-row { display:flex; justify-content:space-between; font-size:14px; color:#6c757d; margin-bottom:10px; }
         .ct-summary-row.total { font-size:16px; font-weight:700; color:#1a1a3e; border-top:1px solid #e8e8f0; padding-top:14px; margin-top:6px; }
         .ct-summary-row.total span:last-child { color:#FF2BAC; }
-        .ct-checkout-btn { width:100%; padding:14px; background:linear-gradient(135deg,#FF2BAC,#FF6BCE); color:#fff; border:none; border-radius:10px; font-size:15px; font-weight:600; cursor:pointer; transition:all .2s; text-decoration:none; display:block; text-align:center; margin-top:16px; }
-        .ct-checkout-btn:hover { box-shadow:0 8px 24px rgba(255,43,172,.3); transform:translateY(-1px); color:#fff; }
+
+        /* Checkout button */
+        .ct-checkout-btn {
+            width:100%; padding:14px;
+            background:linear-gradient(135deg,#FF2BAC,#FF6BCE);
+            color:#fff; border:none; border-radius:10px;
+            font-size:15px; font-weight:600; cursor:pointer;
+            transition:all .2s; margin-top:16px; display:block; text-align:center;
+        }
+        .ct-checkout-btn:hover:not(:disabled) { box-shadow:0 8px 24px rgba(255,43,172,.3); transform:translateY(-1px); }
+        .ct-checkout-btn:disabled { background:#adb5bd; cursor:not-allowed; transform:none; box-shadow:none; }
+
         .ct-free-ship { font-size:12px; color:#10b981; text-align:center; margin-top:10px; font-weight:500; }
         .ct-ship-progress { height:4px; background:#e8e8f0; border-radius:4px; margin-top:8px; overflow:hidden; }
         .ct-ship-bar { height:100%; background:linear-gradient(90deg,#FF2BAC,#FF6BCE); border-radius:4px; transition:width .4s ease; }
+
+        /* Select-all bar */
+        .ct-select-bar { background:#fff; border:1px solid #e8e8f0; border-radius:10px; padding:10px 16px; margin-bottom:12px; display:flex; align-items:center; gap:10px; }
+        .ct-select-bar label { font-size:13px; font-weight:600; color:#1a1a3e; cursor:pointer; margin:0; }
+
+        /* Empty / skeleton */
         .ct-empty { text-align:center; padding:80px 20px; }
         .ct-empty-icon { font-size:64px; margin-bottom:16px; }
         .ct-empty h4 { font-family:'Playfair Display',serif; font-size:22px; color:#1a1a3e; margin-bottom:8px; }
@@ -134,12 +160,20 @@
         <div class="row g-4">
 
             <div class="col-12 col-lg-8">
-                <div class="d-flex justify-content-between align-items-center mb-3">
+                <div class="d-flex justify-content-between align-items-center mb-2">
                     <span id="ctItemCount" style="font-size:14px;color:#6c757d;font-weight:500"></span>
                     <button id="clearAllBtn" style="background:none;border:none;font-size:13px;color:#adb5bd;cursor:pointer">
                         🗑 Clear all
                     </button>
                 </div>
+
+                <!-- Select All bar -->
+                <div class="ct-select-bar">
+                    <input type="checkbox" id="selectAllChk" class="ct-check" title="Select all">
+                    <label for="selectAllChk">Select All</label>
+                    <span id="ctSelectedCount" style="font-size:12px;color:#6c757d;margin-left:auto"></span>
+                </div>
+
                 <div id="ctItems"></div>
             </div>
 
@@ -147,7 +181,7 @@
                 <div class="ct-summary">
                     <div class="ct-summary-title">Order Summary</div>
                     <div class="ct-summary-row">
-                        <span>Subtotal (<span id="ctSumCount">0</span> items)</span>
+                        <span>Subtotal (<span id="ctSumCount">0</span> selected)</span>
                         <span id="ctSubtotal">₱0.00</span>
                     </div>
                     <div class="ct-summary-row">
@@ -162,7 +196,11 @@
                     <div class="ct-ship-progress mt-1">
                         <div class="ct-ship-bar" id="ctShipBar" style="width:0%"></div>
                     </div>
-                    <a href="/buyer/checkout" class="ct-checkout-btn">Proceed to Checkout →</a>
+
+                    <!-- Checkout button — disabled until items are selected -->
+                    <button id="ctCheckoutBtn" class="ct-checkout-btn" disabled onclick="goToCheckout()">
+                        Checkout (0 items) →
+                    </button>
                     <div style="font-size:12px;color:#adb5bd;text-align:center;margin-top:12px">
                         🔒 Secure checkout &nbsp;·&nbsp; Free shipping over ₱500
                     </div>
@@ -195,14 +233,15 @@ function fmt(amount) {
 // ── Render one cart item ──────────────────────────────────────
 function renderItem(item) {
     const img      = imgUrl(item.image);
-    const name     = item.product_name || item.name || item.product?.name || 'Product';
+    const name     = item.product_name || item.name || 'Product';
     const price    = Number(item.price || item.price_snapshot || 0);
     const qty      = Number(item.quantity || 1);
     const sub      = price * qty;
     const maxStock = Number(item.available_stock ?? 9999);
     const atMax    = qty >= maxStock;
+    const selected = !!item.is_selected;
 
-    const variantVal  = item.variant_value || item.variant?.value || '';
+    const variantVal  = item.variant_value || item.variant || '';
     const variantHtml = variantVal ? `<div class="ct-item-variant">Color: ${variantVal}</div>` : '';
 
     const stockHtml = atMax
@@ -214,7 +253,10 @@ function renderItem(item) {
         : '?';
 
     return `
-    <div class="ct-item d-flex gap-3" id="item-${item.id}">
+    <div class="ct-item d-flex gap-3 align-items-start ${selected ? 'ct-selected' : ''}" id="item-${item.id}">
+        <input type="checkbox" class="ct-check mt-1" id="chk-${item.id}"
+               ${selected ? 'checked' : ''}
+               onchange="toggleItemSelection('${item.id}', this.checked)">
         <div class="ct-item-img">${imgHtml}</div>
         <div class="flex-grow-1 min-w-0">
             <div class="ct-item-name text-truncate">${name}</div>
@@ -248,17 +290,19 @@ function renderCart(cart) {
         `${cart.length} item${cart.length !== 1 ? 's' : ''} in your cart`;
     document.getElementById('ctItems').innerHTML = cart.map(renderItem).join('');
     updateSummary(cart);
+    syncSelectAllCheckbox(cart);
 }
 
-// ── Summary numbers ───────────────────────────────────────────
+// ── Summary — based on SELECTED items only ────────────────────
 function updateSummary(cart) {
-    const subtotal = cart.reduce((s, i) => s + Number(i.price || i.price_snapshot || 0) * Number(i.quantity || 0), 0);
-    const shipping = subtotal >= 500 ? 0 : 50;
-    const total    = subtotal + shipping;
-    const totalQty = cart.reduce((s, i) => s + Number(i.quantity || 0), 0);
+    const selected  = cart.filter(i => i.is_selected);
+    const subtotal  = selected.reduce((s, i) => s + Number(i.price || i.price_snapshot || 0) * Number(i.quantity || 0), 0);
+    const shipping  = selected.length > 0 ? (subtotal >= 500 ? 0 : 50) : 0;
+    const total     = subtotal + shipping;
+    const totalQty  = selected.reduce((s, i) => s + Number(i.quantity || 0), 0);
 
     document.getElementById('ctSubtotal').textContent = fmt(subtotal);
-    document.getElementById('ctShipping').textContent = shipping === 0 ? 'FREE' : fmt(shipping);
+    document.getElementById('ctShipping').textContent = shipping === 0 && selected.length > 0 ? 'FREE' : fmt(shipping);
     document.getElementById('ctTotal').textContent    = fmt(total);
     document.getElementById('ctSumCount').textContent = totalQty;
 
@@ -266,20 +310,72 @@ function updateSummary(cart) {
     document.getElementById('ctShipBar').style.width = progress + '%';
     document.getElementById('ctShipMsg').textContent = subtotal >= 500
         ? 'You\'ve unlocked free shipping!'
-        : `Add ${fmt(500 - subtotal)} more for free shipping`;
+        : selected.length > 0 ? `Add ${fmt(500 - subtotal)} more for free shipping` : '';
 
+    // Update checkout button
+    const btn = document.getElementById('ctCheckoutBtn');
+    btn.disabled = selected.length === 0;
+    btn.textContent = selected.length > 0
+        ? `Checkout (${selected.length} item${selected.length !== 1 ? 's' : ''}) →`
+        : 'Checkout (0 items) →';
+
+    // Update selected count label
+    document.getElementById('ctSelectedCount').textContent =
+        selected.length > 0 ? `${selected.length} of ${cart.length} selected` : '';
+
+    // Update navbar cart badge (total items, not just selected)
+    const allQty = cart.reduce((s, i) => s + Number(i.quantity || 0), 0);
     document.querySelectorAll('.cart-count').forEach(el => {
-        el.textContent = totalQty;
-        el.style.display = totalQty > 0 ? 'flex' : 'none';
+        el.textContent = allQty;
+        el.style.display = allQty > 0 ? 'flex' : 'none';
     });
-
-    const set = (id, val) => { const el = document.getElementById(id); if (el) el.textContent = val; };
-    set('subtotalAmt', fmt(subtotal));
-    set('shippingAmt', shipping === 0 ? 'FREE' : fmt(shipping));
-    set('totalAmt',    fmt(total));
 }
 
-// ── Change quantity (with stock check) ────────────────────────
+// ── Keep Select All checkbox in sync ─────────────────────────
+function syncSelectAllCheckbox(cart) {
+    const chk = document.getElementById('selectAllChk');
+    if (!chk) return;
+    const allSelected = cart.length > 0 && cart.every(i => i.is_selected);
+    const someSelected = cart.some(i => i.is_selected);
+    chk.checked       = allSelected;
+    chk.indeterminate = someSelected && !allSelected;
+}
+
+// ── Toggle single item selection (persisted server-side) ──────
+async function toggleItemSelection(itemId, selected) {
+    const item = cartData.find(i => i.id === itemId);
+    if (!item) return;
+
+    // Optimistic update
+    item.is_selected = selected;
+    const card = document.getElementById(`item-${itemId}`);
+    if (card) card.classList.toggle('ct-selected', selected);
+    updateSummary(cartData);
+    syncSelectAllCheckbox(cartData);
+
+    // Persist to server
+    await fetch('/buyer/api/cart/select', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ mode: 'item', item_id: itemId, selected }),
+    }).catch(() => null);
+}
+
+// ── Select All / Deselect All ─────────────────────────────────
+async function toggleSelectAll(selected) {
+    cartData.forEach(i => { i.is_selected = selected; });
+    document.getElementById('ctItems').innerHTML = cartData.map(renderItem).join('');
+    updateSummary(cartData);
+    syncSelectAllCheckbox(cartData);
+
+    await fetch('/buyer/api/cart/select', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ mode: 'all', selected }),
+    }).catch(() => null);
+}
+
+// ── Change quantity ───────────────────────────────────────────
 async function changeQty(itemId, newQty) {
     if (newQty < 1) { removeItem(itemId); return; }
     const item = cartData.find(i => i.id === itemId);
@@ -288,7 +384,6 @@ async function changeQty(itemId, newQty) {
         showToast(`Maximum stock reached (${maxStock} available)`, true);
         return;
     }
-    // Optimistic update
     if (item) {
         item.quantity = newQty;
         document.getElementById('ctItems').innerHTML = cartData.map(renderItem).join('');
@@ -296,12 +391,9 @@ async function changeQty(itemId, newQty) {
     }
     const res = await API.buyer.updateCartItem(itemId, newQty).catch(() => ({ error: 'Network error' }));
     if (res && res.max !== undefined) {
-        if (item) {
-            item.quantity = res.max;
-            item.available_stock = res.max;
-            document.getElementById('ctItems').innerHTML = cartData.map(renderItem).join('');
-            updateSummary(cartData);
-        }
+        if (item) { item.quantity = res.max; item.available_stock = res.max; }
+        document.getElementById('ctItems').innerHTML = cartData.map(renderItem).join('');
+        updateSummary(cartData);
         showToast(`Only ${res.max} in stock.`, true);
     } else if (res && res.error) {
         showToast(res.error, true);
@@ -321,7 +413,7 @@ async function removeItem(itemId) {
 // ── Clear all ─────────────────────────────────────────────────
 async function clearAllItems() {
     if (!cartData.length) return;
-    const ids = [...cartData.map(i => i.id)];
+    const ids = cartData.map(i => i.id);
     cartData = [];
     renderCart([]);
     await Promise.all(ids.map(id => API.buyer.removeCartItem(id).catch(() => null)));
@@ -329,17 +421,25 @@ async function clearAllItems() {
     showToast('Cart cleared.');
 }
 
+// ── Go to checkout (selection already persisted server-side) ──
+function goToCheckout() {
+    const selected = cartData.filter(i => i.is_selected);
+    if (!selected.length) {
+        showToast('Please select at least one item to checkout.', true);
+        return;
+    }
+    window.location.href = '/buyer/checkout';
+}
+
 // ── Load cart ─────────────────────────────────────────────────
 async function loadCartPage() {
     updateCartBadge();
     const raw = await API.buyer.getCart().catch(() => null);
-    // API.buyer.getCart() uses _unwrap which merges data fields to top level
-    // so the result is {success, items, item_count, total} — not {data:{items:[]}}
     let items = [];
-    if (Array.isArray(raw))                              items = raw;
-    else if (raw && Array.isArray(raw.items))            items = raw.items;
+    if (Array.isArray(raw))                                   items = raw;
+    else if (raw && Array.isArray(raw.items))                 items = raw.items;
     else if (raw && raw.data && Array.isArray(raw.data.items)) items = raw.data.items;
-    else if (raw && Array.isArray(raw.data))             items = raw.data;
+    else if (raw && Array.isArray(raw.data))                  items = raw.data;
 
     if (!items.length) {
         document.getElementById('ctLoading').style.display = 'none';
@@ -348,9 +448,10 @@ async function loadCartPage() {
     }
     cartData = items.map(item => ({
         ...item,
-        image: imgUrl(item.image),
-        name:  item.product_name || item.name || item.product?.name || 'Product',
-        price: item.price ?? item.price_snapshot ?? 0,
+        image:       imgUrl(item.image),
+        name:        item.product_name || item.name || 'Product',
+        price:       item.price ?? item.price_snapshot ?? 0,
+        is_selected: !!item.is_selected,   // restored from server
     }));
     renderCart(cartData);
 }
@@ -358,6 +459,9 @@ async function loadCartPage() {
 document.addEventListener('DOMContentLoaded', () => {
     loadCartPage();
     document.getElementById('clearAllBtn')?.addEventListener('click', clearAllItems);
+    document.getElementById('selectAllChk')?.addEventListener('change', function() {
+        toggleSelectAll(this.checked);
+    });
 });
 </script>
 </body>

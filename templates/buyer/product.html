@@ -19,15 +19,22 @@
         .pd-nav-icon:hover { color:#FF2BAC; }
         .pd-cart-badge { position:absolute; top:0; right:0; background:#FF2BAC; color:#fff; font-size:10px; font-weight:700; width:16px; height:16px; border-radius:50%; display:flex; align-items:center; justify-content:center; }
 
-        /* ── Carousel ── */
-        .pd-carousel-wrap { background:#fff; border-radius:16px; overflow:hidden; border:1px solid #e8e8f0; }
-        .pd-carousel .carousel-item { aspect-ratio:1; background:#f8f9fa; display:flex; align-items:center; justify-content:center; }
-        .pd-carousel .carousel-item img { width:100%; height:100%; object-fit:cover; }
-        .pd-carousel .carousel-item .placeholder-icon { font-size:80px; }
-        .pd-carousel .carousel-control-prev,
-        .pd-carousel .carousel-control-next { width:40px; height:40px; background:rgba(255,255,255,.9); border-radius:50%; top:50%; transform:translateY(-50%); margin:0 8px; box-shadow:0 2px 8px rgba(0,0,0,.15); }
-        .pd-carousel .carousel-control-prev-icon,
-        .pd-carousel .carousel-control-next-icon { filter:invert(1) sepia(1) saturate(5) hue-rotate(290deg); width:16px; height:16px; }
+        /* ── Image viewer ── */
+        .pd-carousel-wrap { background:#fff; border-radius:16px; overflow:hidden; border:1px solid #e8e8f0; position:relative; }
+        .pd-main-img { aspect-ratio:1; background:#f8f9fa; display:flex; align-items:center; justify-content:center; overflow:hidden; }
+        .pd-main-img img { width:100%; height:100%; object-fit:cover; display:block; }
+        .pd-main-img .placeholder-icon { font-size:80px; }
+        .pd-img-prev, .pd-img-next {
+            position:absolute; top:50%; transform:translateY(-50%);
+            width:40px; height:40px; background:rgba(255,255,255,.9); border:none;
+            border-radius:50%; cursor:pointer; font-size:18px; color:#1a1a3e;
+            display:flex; align-items:center; justify-content:center;
+            box-shadow:0 2px 8px rgba(0,0,0,.15); z-index:2; transition:opacity .2s;
+        }
+        .pd-img-prev { left:8px; }
+        .pd-img-next { right:8px; }
+        .pd-img-prev:hover, .pd-img-next:hover { background:#fff; color:#FF2BAC; }
+        .pd-img-prev[hidden], .pd-img-next[hidden] { display:none; }
 
         /* ── Thumbnails ── */
         .pd-thumb-nav { display:flex; align-items:center; gap:6px; margin-top:10px; }
@@ -180,22 +187,14 @@
     <div id="pdContent" style="display:none">
         <div class="row g-4">
 
-            <!-- Left: Image carousel -->
+            <!-- Left: Image viewer -->
             <div class="col-12 col-md-5">
                 <div class="pd-carousel-wrap">
-                    <div id="pdCarousel" class="carousel slide pd-carousel" data-bs-ride="false">
-                        <div class="carousel-inner" id="carouselInner">
-                            <div class="carousel-item active">
-                                <div class="placeholder-icon">🛍️</div>
-                            </div>
-                        </div>
-                        <button class="carousel-control-prev" type="button" data-bs-target="#pdCarousel" data-bs-slide="prev">
-                            <span class="carousel-control-prev-icon"></span>
-                        </button>
-                        <button class="carousel-control-next" type="button" data-bs-target="#pdCarousel" data-bs-slide="next">
-                            <span class="carousel-control-next-icon"></span>
-                        </button>
+                    <div class="pd-main-img" id="pdMainImg">
+                        <div class="placeholder-icon">🛍️</div>
                     </div>
+                    <button class="pd-img-prev" id="pdImgPrev" onclick="shiftImage(-1)" hidden>&#8249;</button>
+                    <button class="pd-img-next" id="pdImgNext" onclick="shiftImage(1)" hidden>&#8250;</button>
                 </div>
                 <!-- Thumbnails with arrow navigation -->
                 <div class="pd-thumb-nav" id="pdThumbNav" style="display:none">
@@ -485,101 +484,82 @@ function selectVariant(variantId, el) {
     updateAddToCartButton();
 }
 
-// ── Carousel ──────────────────────────────────────────────────
+// ── Image viewer (no Bootstrap carousel — plain index-based) ──
 const MAX_VISIBLE_THUMBS = 5;
 const THUMB_STEP = 72; // 64px + 8px gap
-let thumbOffset = 0;
-let totalImages  = 0;
+let thumbOffset       = 0;
+let totalImages       = 0;
+let currentImgIndex   = 0;
+let currentImgUrls    = [];
 
-function buildCarouselSlides(images) {
-    thumbOffset = 0;
-    totalImages  = images.length;
+function showImage(idx) {
+    if (!currentImgUrls.length) return;
+    // wrap-around
+    idx = ((idx % currentImgUrls.length) + currentImgUrls.length) % currentImgUrls.length;
+    currentImgIndex = idx;
 
-    const carouselEl = document.getElementById('pdCarousel');
-    const inner      = document.getElementById('carouselInner');
-    const track      = document.getElementById('pdThumbTrack');
-    const nav        = document.getElementById('pdThumbNav');
+    const mainEl = document.getElementById('pdMainImg');
+    const url    = currentImgUrls[idx];
+    mainEl.innerHTML = `<img src="${url}" alt="product image ${idx + 1}"
+        onerror="this.parentElement.innerHTML='<div class=\'placeholder-icon\'>&#128717;</div>'">`;
 
-    // Normalise: accept both plain URL strings and {image_url} objects
-    const urls = images.map(img => (typeof img === 'string' ? img : (img.image_url || ''))).filter(Boolean);
-    totalImages = urls.length;
-
-    // Dispose existing Bootstrap carousel instance properly
-    try {
-        const existing = bootstrap.Carousel.getInstance(carouselEl);
-        if (existing) existing.dispose();
-    } catch(e) {}
-
-    if (!urls.length) {
-        inner.innerHTML = `<div class="carousel-item active"><div class="placeholder-icon">🛍️</div></div>`;
-        track.innerHTML = '';
-        nav.style.display = 'none';
-        carouselEl.querySelectorAll('.carousel-control-prev,.carousel-control-next')
-            .forEach(b => b.style.display = 'none');
-        return;
-    }
-
-    // Build carousel slides
-    inner.innerHTML = urls.map((img, i) => `
-        <div class="carousel-item${i === 0 ? ' active' : ''}">
-            <img src="${img}" alt="product image ${i + 1}" onerror="this.style.display='none';this.parentElement.innerHTML='<div class=\'placeholder-icon\'>🛍️</div>'">
-        </div>
-    `).join('');
-
-    // Build thumbnails
-    track.innerHTML = urls.map((img, i) => `
-        <div class="pd-thumb${i === 0 ? ' active' : ''}" data-idx="${i}">
-            <img src="${img}" alt="thumb ${i + 1}" onerror="this.parentElement.style.background='#f8f9fa'">
-        </div>
-    `).join('');
-
-    // Attach click handlers to thumbnails
-    track.querySelectorAll('.pd-thumb').forEach((thumb, idx) => {
-        thumb.onclick = () => {
-            setActiveThumb(idx);
-            const carousel = bootstrap.Carousel.getInstance(carouselEl);
-            if (carousel) carousel.to(idx);
-        };
-    });
-
-    // Show/hide navigation arrows
-    const hasMultiple = urls.length > 1;
-    carouselEl.querySelectorAll('.carousel-control-prev,.carousel-control-next')
-        .forEach(b => b.style.display = hasMultiple ? '' : 'none');
-
-    // Show thumbnail navigation
-    nav.style.display = 'flex';
-    document.getElementById('pdThumbPrev').style.display = urls.length > MAX_VISIBLE_THUMBS ? '' : 'none';
-    document.getElementById('pdThumbNext').style.display = urls.length > MAX_VISIBLE_THUMBS ? '' : 'none';
-    updateThumbScroll();
-
-    // Initialize Bootstrap carousel
-    const carousel = bootstrap.Carousel.getOrCreateInstance(carouselEl, {
-        ride: false,
-        wrap: true,
-        interval: false
-    });
-
-    // Reattach slide event listener
-    carouselEl.removeEventListener('slid.bs.carousel', onCarouselSlid);
-    carouselEl.addEventListener('slid.bs.carousel', onCarouselSlid);
-}
-
-
-function onCarouselSlid(e) {
-    const items = document.querySelectorAll('#carouselInner .carousel-item');
-    const idx   = Array.from(items).indexOf(e.relatedTarget);
-    if (idx !== -1) setActiveThumb(idx);
-}
-
-function setActiveThumb(idx) {
+    // sync thumbnail highlight
     document.querySelectorAll('.pd-thumb').forEach((t, i) => t.classList.toggle('active', i === idx));
+    // keep thumb strip scrolled to show active thumb
     if (idx < thumbOffset) {
         thumbOffset = idx;
     } else if (idx >= thumbOffset + MAX_VISIBLE_THUMBS) {
         thumbOffset = idx - MAX_VISIBLE_THUMBS + 1;
     }
     updateThumbScroll();
+
+    const hasMultiple = currentImgUrls.length > 1;
+    document.getElementById('pdImgPrev').hidden = !hasMultiple;
+    document.getElementById('pdImgNext').hidden = !hasMultiple;
+}
+
+function shiftImage(dir) {
+    showImage(currentImgIndex + dir);
+}
+
+function buildImageViewer(images) {
+    thumbOffset = 0;
+
+    const urls = images
+        .map(img => (typeof img === 'string' ? img : (img.image_url || '')))
+        .filter(Boolean);
+
+    currentImgUrls = urls;
+    totalImages    = urls.length;
+
+    const track = document.getElementById('pdThumbTrack');
+    const nav   = document.getElementById('pdThumbNav');
+
+    if (!urls.length) {
+        document.getElementById('pdMainImg').innerHTML = '<div class="placeholder-icon">&#128717;</div>';
+        document.getElementById('pdImgPrev').hidden = true;
+        document.getElementById('pdImgNext').hidden = true;
+        track.innerHTML    = '';
+        nav.style.display  = 'none';
+        return;
+    }
+
+    track.innerHTML = urls.map((url, i) => `
+        <div class="pd-thumb${i === 0 ? ' active' : ''}" data-idx="${i}">
+            <img src="${url}" alt="thumb ${i + 1}" onerror="this.parentElement.style.background='#f8f9fa'">
+        </div>
+    `).join('');
+
+    track.querySelectorAll('.pd-thumb').forEach((thumb, i) => {
+        thumb.onclick = () => showImage(i);
+    });
+
+    nav.style.display = 'flex';
+    document.getElementById('pdThumbPrev').style.display = urls.length > MAX_VISIBLE_THUMBS ? '' : 'none';
+    document.getElementById('pdThumbNext').style.display = urls.length > MAX_VISIBLE_THUMBS ? '' : 'none';
+    updateThumbScroll();
+
+    showImage(0);
 }
 
 function updateThumbScroll() {
@@ -599,7 +579,7 @@ function updateCarouselImages(variantId) {
     const images = pdVariantMap[variantId]?.length
         ? pdVariantMap[variantId]
         : (pdVariantMap['general'] || []);
-    buildCarouselSlides(images);
+    buildImageViewer(images);
 }
 
 // ── Render product ────────────────────────────────────────────
@@ -685,10 +665,10 @@ function renderProduct(p) {
 
         // Show images for first variant (variant-specific + general)
         const firstVarImages = pdVariantMap[firstVariant.id] || pdVariantMap['general'] || [];
-        buildCarouselSlides(firstVarImages);
+        buildImageViewer(firstVarImages);
     } else {
         // No variants - use general images only
-        buildCarouselSlides(pdVariantMap['general'] || []);
+        buildImageViewer(pdVariantMap['general'] || []);
     }
 
     // Quantity setup
@@ -706,20 +686,27 @@ function renderProduct(p) {
         addToCart({ id: p.id, name: p.name }, pdQty, variantId);
     };
 
-    // Buy Now — add to cart then redirect to checkout (only if in stock)
+    // Buy Now — store only this product in session, redirect to buy-now checkout
     document.getElementById('pdCheckoutBtn').onclick = async () => {
         if (currentStock <= 0) return;
         const variantId = document.getElementById('selectedVariant')?.value || null;
         try {
-            const res = await API.buyer.addToCart({
-                product_id: p.id,
-                variant_id: variantId,
-                quantity: pdQty
-            });
+            const res = await fetch('/buyer/api/buy-now', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': document.querySelector('meta[name="csrf-token"]')?.content || ''
+                },
+                body: JSON.stringify({
+                    product_id: p.id,
+                    variant_id: variantId,
+                    quantity: pdQty
+                })
+            }).then(r => r.json());
             if (res.success) {
-                window.location.href = '/buyer/checkout';
+                window.location.href = '/buyer/checkout?mode=buy_now';
             } else {
-                showToast(res.error || 'Failed to add to cart', true);
+                showToast(res.error || 'Failed to proceed to checkout', true);
             }
         } catch (err) {
             showToast('Network error', true);

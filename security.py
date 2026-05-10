@@ -292,29 +292,30 @@ def get_login_delay(identifier):
 # ── Password Validation ───────────────────────────────────────
 # Enforce minimum password requirements including special characters
 
-_SPECIAL_CHARS = set('!@#$%^&*()_+-=[]{}|;:,.<>?')
+_SPECIAL_CHARS = set('!@#$%^&*()-_=+[]{}|;:\'",.<>?/')
 
 
 def validate_password(password):
     """
     Validate password meets security requirements:
     - At least 8 characters
-    - Must include at least 1 letter (A-Z, a-z)
-    - Must include at least 1 number (0-9)
-    - Must include at least 1 special character (!@#$%^&* etc.)
+    - At least 1 uppercase letter (A-Z)
+    - At least 1 lowercase letter (a-z)
+    - At least 1 digit (0-9)
+    - At least 1 special character
 
     Returns (is_valid, error_message)
     """
     if not password or len(password) < 8:
-        return False, 'Password must be at least 8 characters and include letters, numbers, and a special character.'
-
-    has_letter = bool(re.search(r'[A-Za-z]', password))
-    has_number = bool(re.search(r'[0-9]', password))
-    has_special = any(c in _SPECIAL_CHARS for c in password)
-
-    if not has_letter or not has_number or not has_special:
-        return False, 'Password must be at least 8 characters and include letters, numbers, and a special character.'
-
+        return False, 'Password must be at least 8 characters.'
+    if not re.search(r'[A-Z]', password):
+        return False, 'Password must contain at least one uppercase letter.'
+    if not re.search(r'[a-z]', password):
+        return False, 'Password must contain at least one lowercase letter.'
+    if not re.search(r'[0-9]', password):
+        return False, 'Password must contain at least one digit.'
+    if not any(c in _SPECIAL_CHARS for c in password):
+        return False, 'Password must contain at least one special character (!@#$%^&* etc.).'
     return True, ''
 
 

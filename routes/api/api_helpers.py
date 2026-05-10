@@ -445,6 +445,7 @@ def serialize_cart_item(item: Dict[str, Any]) -> Dict[str, Any]:
         "price":        price_val,
         "quantity":     qty,
         "subtotal":     subtotal,
+        "is_selected":  bool(item.get("is_selected", False)),
     }
 
 

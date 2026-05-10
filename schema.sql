@@ -400,6 +400,7 @@ create table if not exists email_otps (
     email      text        not null,
     otp        text        not null,
     expires_at timestamptz not null,
+    sent_at    timestamptz not null default now(),
     created_at timestamptz not null default now(),
     primary key (id),
     unique (email)

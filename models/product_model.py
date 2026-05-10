@@ -2,15 +2,11 @@ from supabase import create_client
 import os
 
 class ProductModel:
-    _supabase = None
-
     def __init__(self):
-        if ProductModel._supabase is None:
-            ProductModel._supabase = create_client(
-                os.getenv('SUPABASE_URL'),
-                os.getenv('SUPABASE_SERVICE_ROLE_KEY')
-            )
-        self.supabase = ProductModel._supabase
+        self.supabase = create_client(
+            os.getenv('SUPABASE_URL'),
+            os.getenv('SUPABASE_SERVICE_ROLE_KEY')
+        )
     
     def get_by_id(self, product_id):
         """Get product by ID with variants and images"""

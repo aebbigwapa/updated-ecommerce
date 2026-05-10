@@ -174,22 +174,41 @@ def api_send_otp():
     if not email:
         return api_error("Email is required", status=400)
 
-    import secrets, os
-    from datetime import datetime, timezone, timedelta
-    from supabase import create_client
+    try:
+        import secrets
+        import os
+        from datetime import datetime, timezone, timedelta
+        from supabase import create_client
 
-    sb         = create_client(os.getenv('SUPABASE_URL'), os.getenv('SUPABASE_SERVICE_ROLE_KEY'))
-    otp        = ''.join([str(secrets.randbelow(10)) for _ in range(6)])
-    expires_at = (datetime.now(timezone.utc) + timedelta(minutes=10)).isoformat()
+        sb         = create_client(os.getenv('SUPABASE_URL'), os.getenv('SUPABASE_SERVICE_ROLE_KEY'))
+        otp        = ''.join([str(secrets.randbelow(10)) for _ in range(6)])
+        expires_at = (datetime.now(timezone.utc) + timedelta(minutes=10)).isoformat()
+        otp_payload = {'email': email, 'otp': otp, 'expires_at': expires_at}
 
-    sb.table('email_otps').upsert({'email': email, 'otp': otp, 'expires_at': expires_at}).execute()
+        # Write OTP to DB — try update first, insert if no existing row
+        try:
+            result = sb.table('email_otps').update(otp_payload).eq('email', email).execute()
+            if not result.data:
+                sb.table('email_otps').insert(otp_payload).execute()
+        except Exception:
+            # Fallback: delete then insert
+            try:
+                sb.table('email_otps').delete().eq('email', email).execute()
+                sb.table('email_otps').insert(otp_payload).execute()
+            except Exception as e:
+                traceback.print_exc()
+                return api_error("Failed to save OTP. Please try again.", status=500)
 
-    from services.email_service import send_otp_email
-    sent = send_otp_email(email, 'User', otp)
+        from services.email_service import send_otp_email
+        sent = send_otp_email(email, 'User', otp)
 
-    if sent:
-        return api_response(message="OTP sent to your email", status=200)
-    return api_error("Failed to send OTP. Please try again.", status=500)
+        if sent:
+            return api_response(message="OTP sent to your email", status=200)
+        return api_error("Failed to send OTP. Please try again.", status=500)
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return api_error("Failed to send OTP. Please try again.", status=500)
 
 
 @auth_api_bp.post('/auth/verify-otp')
