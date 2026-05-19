@@ -74,6 +74,7 @@ def create_app():
     from routes.api.admin_api import admin_api_bp as mobile_admin_api_bp
     from routes.api.rider_api import rider_api_bp
     from routes.api.messages_api import messages_api_bp
+    from routes.api.shipping_api import shipping_api_bp
     
     app.register_blueprint(auth_bp)
     app.register_blueprint(admin_bp, url_prefix='/admin')
@@ -91,6 +92,7 @@ def create_app():
     app.register_blueprint(mobile_admin_api_bp, url_prefix='/api')
     app.register_blueprint(rider_api_bp,        url_prefix='/api')
     app.register_blueprint(messages_api_bp,     url_prefix='/api')
+    app.register_blueprint(shipping_api_bp,     url_prefix='/api')
 
     # Register API error handlers for Flutter compatibility
     from routes.api.api_helpers import register_api_error_handlers
