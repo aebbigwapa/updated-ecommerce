@@ -1,4 +1,7 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:image_picker/image_picker.dart';
+import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 import '../../theme/app_theme.dart';
 import '../../services/api_service.dart';
@@ -18,6 +21,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
   String  _lastName  = '';
   String  _email     = '';
   String  _role      = '';
+  String? _profilePicture;
+  bool    _uploadingPic = false;
 
   @override
   void initState() {
@@ -42,10 +47,11 @@ class _ProfileScreenState extends State<ProfileScreen> {
       final data = await ApiService.getCurrentUser();
       if (data != null && mounted) {
         setState(() {
-          _firstName = data['first_name'] ?? '';
-          _lastName  = data['last_name']  ?? '';
-          _email     = data['email']      ?? '';
-          _role      = data['role']       ?? '';
+          _firstName      = data['first_name'] ?? '';
+          _lastName       = data['last_name']  ?? '';
+          _email          = data['email']      ?? '';
+          _role           = data['role']       ?? '';
+          _profilePicture = data['profile_picture'] as String?;
           _isLoading = false;
         });
       } else if (mounted) {
@@ -53,6 +59,51 @@ class _ProfileScreenState extends State<ProfileScreen> {
       }
     } catch (_) {
       if (mounted) setState(() => _isLoading = false);
+    }
+  }
+
+  Future<void> _pickAndUploadPicture() async {
+    final picker = ImagePicker();
+    final picked = await picker.pickImage(
+        source: ImageSource.gallery, imageQuality: 80, maxWidth: 800);
+    if (picked == null || !mounted) return;
+    setState(() => _uploadingPic = true);
+    try {
+      final token = await ApiService.getAuthToken();
+      if (token == null) return;
+      final req = http.MultipartRequest(
+        'POST',
+        Uri.parse('${ApiService.flaskBaseUrl}/api/profile/picture'),
+      );
+      req.headers['Authorization'] = 'Bearer $token';
+      req.files.add(await http.MultipartFile.fromPath('photo', picked.path));
+      final streamed = await req.send().timeout(const Duration(seconds: 30));
+      final body = await streamed.stream.bytesToString();
+      if (streamed.statusCode == 200 && mounted) {
+        // parse url from response
+        final url = RegExp(r'"profile_picture"\s*:\s*"([^"]+)"')
+            .firstMatch(body)
+            ?.group(1);
+        if (url != null) setState(() => _profilePicture = url);
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Profile picture updated!'),
+              backgroundColor: Colors.green),
+        );
+      } else if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Upload failed'),
+              backgroundColor: Colors.red),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Upload failed: $e'),
+              backgroundColor: Colors.red),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _uploadingPic = false);
     }
   }
 
@@ -188,13 +239,52 @@ class _ProfileScreenState extends State<ProfileScreen> {
             decoration: const BoxDecoration(gradient: AppTheme.primaryGradient),
             child: Column(
               children: [
-                CircleAvatar(
-                  radius: 40,
-                  backgroundColor: AppTheme.white.withValues(alpha: 0.3),
-                  child: Text(initials,
-                      style: const TextStyle(
-                          fontSize: 32, fontWeight: FontWeight.w700,
-                          color: AppTheme.white)),
+                GestureDetector(
+                  onTap: _pickAndUploadPicture,
+                  child: Stack(
+                    children: [
+                      CircleAvatar(
+                        radius: 40,
+                        backgroundColor: AppTheme.white.withValues(alpha: 0.3),
+                        backgroundImage: _profilePicture != null && _profilePicture!.isNotEmpty
+                            ? NetworkImage(_profilePicture!) as ImageProvider
+                            : null,
+                        child: _profilePicture == null || _profilePicture!.isEmpty
+                            ? Text(initials,
+                                style: const TextStyle(
+                                    fontSize: 32, fontWeight: FontWeight.w700,
+                                    color: AppTheme.white))
+                            : null,
+                      ),
+                      if (_uploadingPic)
+                        Positioned.fill(
+                          child: Container(
+                            decoration: BoxDecoration(
+                              color: Colors.black.withValues(alpha: 0.4),
+                              shape: BoxShape.circle,
+                            ),
+                            child: const Center(
+                              child: CircularProgressIndicator(
+                                  color: Colors.white, strokeWidth: 2),
+                            ),
+                          ),
+                        ),
+                      Positioned(
+                        bottom: 0, right: 0,
+                        child: Container(
+                          width: 26, height: 26,
+                          decoration: BoxDecoration(
+                            color: AppTheme.white,
+                            shape: BoxShape.circle,
+                            border: Border.all(
+                                color: AppTheme.primaryLight, width: 1.5),
+                          ),
+                          child: const Icon(Icons.camera_alt,
+                              size: 14, color: AppTheme.primaryLight),
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
                 const SizedBox(height: AppTheme.sm),
                 Text(fullName,
@@ -240,11 +330,31 @@ class _ProfileScreenState extends State<ProfileScreen> {
               label: 'My Orders',
               onTap: () => Navigator.pushNamed(context, '/orders'),
             ),
+            _buildMenuItem(
+              icon: Icons.favorite_border,
+              label: 'My Wishlist',
+              onTap: () => Navigator.pushNamed(context, '/wishlist'),
+            ),
+            _buildMenuItem(
+              icon: Icons.location_on_outlined,
+              label: 'My Addresses',
+              onTap: () => Navigator.pushNamed(context, '/addresses'),
+            ),
           ]),
 
           const SizedBox(height: AppTheme.sm),
 
           _buildSection('More', [
+            _buildMenuItem(
+              icon: Icons.settings_outlined,
+              label: 'Settings',
+              onTap: () => Navigator.pushNamed(context, '/settings'),
+            ),
+            _buildMenuItem(
+              icon: Icons.chat_bubble_outline,
+              label: 'Messages',
+              onTap: () => Navigator.pushNamed(context, '/messages'),
+            ),
             _buildMenuItem(
               icon: Icons.help_outline,
               label: 'Help & Support',

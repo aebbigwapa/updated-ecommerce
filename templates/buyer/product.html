@@ -419,15 +419,21 @@ function updateAddToCartButton() {
     const addBtn      = document.getElementById('pdAddCartBtn');
     const buyNowBtn   = document.getElementById('pdCheckoutBtn');
     const outOfStock  = currentStock <= 0;
+    const isLoggedIn  = document.querySelector('[data-user-id]') !== null;
 
     if (addBtn) {
         addBtn.disabled    = outOfStock;
-        addBtn.textContent = outOfStock ? 'Out of Stock' : '🛒 Add to Cart';
+        addBtn.textContent = outOfStock
+            ? 'Out of Stock'
+            : 'Add to Cart';
         addBtn.style.opacity = outOfStock ? '0.5' : '1';
         addBtn.style.cursor  = outOfStock ? 'not-allowed' : 'pointer';
     }
     if (buyNowBtn) {
         buyNowBtn.disabled    = outOfStock;
+        buyNowBtn.textContent = outOfStock
+            ? 'Out of Stock'
+            : 'Buy Now';
         buyNowBtn.style.opacity = outOfStock ? '0.5' : '1';
         buyNowBtn.style.cursor  = outOfStock ? 'not-allowed' : 'pointer';
     }
@@ -683,19 +689,41 @@ function renderProduct(p) {
     // Add to cart
     document.getElementById('pdAddCartBtn').onclick = () => {
         const variantId = document.getElementById('selectedVariant')?.value || null;
+        if (document.querySelector('[data-user-id]') === null) {
+            window.location.href = '/login?return_to=' + encodeURIComponent(window.location.pathname + window.location.search);
+            return;
+        }
         addToCart({ id: p.id, name: p.name }, pdQty, variantId);
     };
 
-    // Buy Now — store only this product in session, redirect to buy-now checkout
+    // Buy Now — check if logged in, if not store intent and redirect to login
     document.getElementById('pdCheckoutBtn').onclick = async () => {
         if (currentStock <= 0) return;
         const variantId = document.getElementById('selectedVariant')?.value || null;
+        
+        // Check if user is logged in (check for session or token)
+        const isLoggedIn = document.querySelector('[data-user-id]') !== null;
+        
+        if (!isLoggedIn) {
+            // Store Buy Now intent in sessionStorage
+            sessionStorage.setItem('buy_now_intent', JSON.stringify({
+                product_id: p.id,
+                variant_id: variantId,
+                quantity: pdQty,
+                timestamp: Date.now()
+            }));
+            // Redirect to login with return parameter
+            window.location.href = '/login?return_to=buy_now';
+            return;
+        }
+        
+        // User is logged in, proceed with Buy Now
         try {
             const res = await fetch('/buyer/api/buy-now', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
-                    'X-CSRFToken': document.querySelector('meta[name="csrf-token"]')?.content || ''
+                    'X-CSRF-Token': document.querySelector('meta[name="csrf-token"]')?.content || ''
                 },
                 body: JSON.stringify({
                     product_id: p.id,
@@ -705,6 +733,12 @@ function renderProduct(p) {
             }).then(r => r.json());
             if (res.success) {
                 window.location.href = '/buyer/checkout?mode=buy_now';
+            } else if (res.error === 'Authentication required') {
+                // Session expired — redirect to login with return intent
+                sessionStorage.setItem('buy_now_intent', JSON.stringify({
+                    product_id: p.id, variant_id: variantId, quantity: pdQty, timestamp: Date.now()
+                }));
+                window.location.href = '/login?return_to=buy_now';
             } else {
                 showToast(res.error || 'Failed to proceed to checkout', true);
             }

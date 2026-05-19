@@ -4,7 +4,7 @@ Handles suppliers, purchase orders, low stock alerts, and inventory analytics
 """
 
 from supabase import create_client, Client
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import List, Dict, Any, Optional
 import os
 
@@ -45,7 +45,7 @@ class InventoryModel:
         try:
             result = self.supabase.table('low_stock_alerts').update({
                 'is_resolved': True,
-                'resolved_at': datetime.now().isoformat(),
+                'resolved_at': datetime.now(timezone.utc).isoformat(),
                 'resolved_by': resolved_by
             }).eq('id', alert_id).execute()
             return len(result.data or []) > 0
@@ -189,7 +189,7 @@ class InventoryModel:
             products_result = self.supabase.table('products').select('*').eq('seller_id', seller_id).eq('status', 'active').execute()
             products = products_result.data or []
             
-            snapshot_date = datetime.now().isoformat()
+            snapshot_date = datetime.now(timezone.utc).isoformat()
             snapshots_created = 0
             
             for product in products:
@@ -242,7 +242,7 @@ class InventoryModel:
     def get_inventory_snapshots(self, seller_id: str, days: int = 30) -> List[Dict[str, Any]]:
         """Get inventory snapshots for the last N days."""
         try:
-            start_date = (datetime.now() - timedelta(days=days)).isoformat()
+            start_date = (datetime.now(timezone.utc) - timedelta(days=days)).isoformat()
             
             result = self.supabase.table('inventory_snapshots').select('*').eq('seller_id', seller_id).gte('snapshot_date', start_date).order('snapshot_date', desc=True).execute()
             return result.data or []

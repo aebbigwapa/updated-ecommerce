@@ -1,5 +1,7 @@
 from models.order_model import OrderModel
 from models.product_model import ProductModel
+from models.user_model import UserModel
+from models.notification_model import NotificationModel
 
 class OrderService:
     """Handles order-related business logic"""
@@ -59,6 +61,39 @@ class OrderService:
             }
             
             order = self.order_model.create(order_data, validated_items)
+
+            try:
+                notification_model = NotificationModel()
+                buyer = UserModel().get_by_id(buyer_id) or {}
+                buyer_name = f"{buyer.get('first_name','')} {buyer.get('last_name','')}".strip() or 'A buyer'
+                order_id = order.get('id')
+                notification_model.create(
+                    user_id=buyer_id,
+                    notif_type='status_update',
+                    title='Order Placed',
+                    message=f'Your order #{order_id[:8].upper()} has been placed successfully.',
+                    action_url=f'/buyer/orders#{order_id}',
+                    data_payload={'order_id': order_id, 'new_status': 'pending'}
+                )
+                seller_ids = set()
+                for item in validated_items:
+                    product = self.product_model.get_by_id(item['product_id'])
+                    seller_id = product.get('seller_id') if product else None
+                    if seller_id and seller_id != buyer_id:
+                        seller_ids.add(seller_id)
+
+                for seller_id in seller_ids:
+                    notification_model.create(
+                        user_id=seller_id,
+                        notif_type='new_order',
+                        title='New Order Received',
+                        message=f'{buyer_name} placed a new order #{order_id[:8].upper()}.',
+                        action_url=f'/seller/orders#{order_id}',
+                        data_payload={'order_id': order_id, 'buyer_id': buyer_id, 'seller_id': seller_id}
+                    )
+            except Exception as e:
+                print(f'Error creating mobile order notifications: {e}')
+
             return {
                 'success': True,
                 'message': 'Order created successfully! Stock has been reserved.',
@@ -93,6 +128,5 @@ class OrderService:
         }
     
     def get_cart(self, buyer_id):
-        """Get buyer cart (for demo purposes)"""
-        # In a real app, this would fetch from cart table/session
-        return []
+        """Get buyer cart from the database."""
+        return self.order_model.get_cart_items(buyer_id)

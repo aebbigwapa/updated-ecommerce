@@ -14,6 +14,12 @@ function formatCurrency(amount) {
     return '₱' + Number(amount || 0).toLocaleString('en-PH', { minimumFractionDigits: 2 });
 }
 
+// ── Logged-in user helper ────────────────────────────────────
+function isUserLoggedIn() {
+    return document.querySelector('[data-user-id]') !== null;
+}
+
+
 // ── Orders ────────────────────────────────────────────────────
 async function loadOrders() {
     const tbody = document.getElementById('ordersTable');

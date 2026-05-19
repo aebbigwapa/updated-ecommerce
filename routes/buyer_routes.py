@@ -17,13 +17,69 @@ review_model = ReviewModel()
 auth_service = AuthService()
 order_service = OrderService()
 
+def _notify_order_created(order, buyer_id):
+    """Notify buyer and involved sellers after a new order is placed."""
+    if not order or not order.get('id'):
+        return
+
+    order_id = order['id']
+    try:
+        notification_model.create(
+            user_id=buyer_id,
+            notif_type='status_update',
+            title='Order Placed',
+            message=f'Your order #{order_id[:8].upper()} has been placed successfully.',
+            action_url=f'/buyer/orders#{order_id}',
+            data_payload={'order_id': order_id, 'new_status': 'pending'}
+        )
+    except Exception as e:
+        print(f'Error creating buyer order notification: {e}')
+
+    seller_ids = set()
+    for item in order.get('order_items') or []:
+        product = item.get('product') or {}
+        seller_id = product.get('seller_id')
+        if seller_id and seller_id != buyer_id:
+            seller_ids.add(seller_id)
+
+    if not seller_ids:
+        return
+
+    buyer = user_model.get_by_id(buyer_id) or {}
+    buyer_name = f"{buyer.get('first_name','')} {buyer.get('last_name','')}".strip() if buyer else 'A buyer'
+    for seller_id in seller_ids:
+        try:
+            notification_model.create(
+                user_id=seller_id,
+                notif_type='new_order',
+                title='New Order Received',
+                message=f'{buyer_name} placed a new order #{order_id[:8].upper()}.',
+                action_url=f'/seller/orders#{order_id}',
+                data_payload={'order_id': order_id, 'buyer_id': buyer_id, 'seller_id': seller_id}
+            )
+        except Exception as e:
+            print(f'Error creating seller order notification: {e}')
+
+
 def buyer_required(f):
     from functools import wraps
     @wraps(f)
     def decorated(*args, **kwargs):
         if 'user' not in session:
+            # Return JSON 401 for AJAX/API calls so the client can handle it
+            # without following an HTML redirect (which caused the "logout" symptom)
+            if request.is_json or request.path.startswith('/buyer/api'):
+                from routes.api.api_helpers import api_error
+                return api_error(
+                    'Authentication required',
+                    status=401,
+                    data={'require_login': True}
+                )
             return redirect(url_for('auth.login'))
         if session['user'].get('role') not in ('buyer', 'seller', 'admin', 'rider'):
+            if request.is_json or request.path.startswith('/buyer/api'):
+                from routes.api.api_helpers import api_error
+                return api_error('Insufficient permissions', status=403)
             return redirect(url_for('index'))
         return f(*args, **kwargs)
     return decorated
@@ -293,6 +349,62 @@ def api_cart():
     except Exception as e:
         return api_error(f"Failed to add to cart: {e}", status=500)
 
+@buyer_bp.route('/api/cart/merge', methods=['POST'])
+@buyer_required
+def api_cart_merge():
+    try:
+        user_id = session['user']['id']
+        data = request.get_json() or {}
+        guest_items = data.get('guest_cart', [])
+        if not isinstance(guest_items, list):
+            return api_error('Invalid guest cart payload', status=400)
+
+        merged_count = 0
+        for item in guest_items:
+            if not isinstance(item, dict):
+                continue
+            product_id = item.get('product_id')
+            variant_id = item.get('variant_id') or None
+            quantity = int(item.get('quantity') or 0)
+            if not product_id or quantity <= 0:
+                continue
+
+            product = product_model.get_by_id(product_id)
+            if not product or product.get('status') != 'active':
+                continue
+
+            if variant_id:
+                variant = next((v for v in (product.get('product_variants') or []) if v['id'] == variant_id), None)
+                if not variant:
+                    continue
+
+            price_snapshot = float(product.get('price') or 0)
+            result = order_model.add_or_increment_cart_item(
+                user_id=user_id,
+                product_id=product_id,
+                variant_id=variant_id,
+                quantity=quantity,
+                price_snapshot=price_snapshot,
+            )
+            if result:
+                merged_count += 1
+
+        cart_items = order_model.get_cart_items(user_id)
+        serialized_items = [serialize_cart_item(cart_item) for cart_item in cart_items]
+        total = round(sum(cart_item.get('subtotal', 0.0) for cart_item in serialized_items), 2)
+        return api_response(
+            data={
+                'items': serialized_items,
+                'item_count': sum(cart_item.get('quantity', 0) for cart_item in serialized_items),
+                'total': total,
+                'merged_count': merged_count,
+            },
+            message=f'Merged {merged_count} item(s) from guest cart',
+            status=200,
+        )
+    except Exception as e:
+        return api_error(f'Failed to merge guest cart: {e}', status=500)
+
 @buyer_bp.route('/api/cart/<item_id>', methods=['PUT', 'DELETE'])
 @buyer_required
 def api_cart_item(item_id):
@@ -513,6 +625,11 @@ def api_buy_now_checkout():
     except Exception as mail_err:
         print(f'Buy-now order email error: {mail_err}')
 
+    try:
+        _notify_order_created(full_order or order, user_id)
+    except Exception as notify_err:
+        print(f'Error creating order notifications: {notify_err}')
+
     return api_response(
         data={'order': serialize_order(full_order or order)},
         message='Order placed successfully!',
@@ -661,6 +778,11 @@ def api_checkout():
         except Exception as mail_err:
             print(f'Order email error: {mail_err}')
 
+        try:
+            _notify_order_created(full_order or order, user_id)
+        except Exception as notify_err:
+            print(f'Error creating order notifications: {notify_err}')
+
         return api_response(
             data={'order': serialize_order(full_order or order)},
             message='Order placed successfully!',
@@ -705,10 +827,38 @@ def api_order_detail(order_id):
     except Exception as e:
         return api_error(f"Failed to fetch order: {e}", status=500)
 
+@buyer_bp.route('/api/orders/<order_id>/cancellation-eligibility', methods=['GET'])
+@buyer_required
+def api_get_cancellation_eligibility(order_id):
+    """Get cancellation eligibility for an order"""
+    try:
+        user_id = session['user']['id']
+        
+        # Load order and verify ownership
+        order = order_model.get_by_id(order_id)
+        if not order:
+            return api_error('Order not found.', status=404)
+
+        if order.get('buyer_id') != user_id:
+            return api_error('Order not found.', status=404)
+
+        # Check eligibility
+        eligibility = order_model.get_cancellation_eligibility(order, 'buyer')
+        
+        return api_response(
+            data=eligibility,
+            message='OK',
+            status=200,
+        )
+    except Exception as e:
+        import traceback; traceback.print_exc()
+        return api_error(f'Failed to get eligibility: {str(e)}', status=500)
+
+
 @buyer_bp.route('/api/orders/<order_id>/cancel', methods=['POST'])
 @buyer_required
 def api_cancel_order(order_id):
-    """Cancel an order. Idempotent — returns success if already cancelled."""
+    """Cancel an order. Supports instant cancellation or approval requests."""
     from security import rate_limit as _rl
     from datetime import datetime, timezone
     try:
@@ -717,7 +867,20 @@ def api_cancel_order(order_id):
         reason  = (data.get('reason') or 'Cancelled by buyer')[:200]
         idem_key = data.get('idempotency_key')
 
-        # Idempotency: if this key already produced a cancellation, return it
+        # Load order and verify ownership
+        order = order_model.get_by_id(order_id)
+        if not order:
+            return api_error('Order not found.', status=404)
+
+        if order.get('buyer_id') != user_id:
+            return api_error('Order not found.', status=404)
+
+        # Check eligibility
+        eligibility = order_model.get_cancellation_eligibility(order, 'buyer')
+        if not eligibility['canCancel']:
+            return api_error(eligibility['message'], status=400)
+
+        # Idempotency check
         if idem_key:
             existing = order_model.supabase.table('orders') \
                 .select('*').eq('cancel_idem_key', idem_key).limit(1).execute()
@@ -728,73 +891,91 @@ def api_cancel_order(order_id):
                     status=200,
                 )
 
-        # Load order and verify ownership
-        order = order_model.supabase.table('orders') \
-            .select('*').eq('id', order_id).limit(1).execute()
-        if not order.data:
-            return api_error('Order not found.', status=404)
-        o = order.data[0]
-
-        if o.get('buyer_id') != user_id:
-            return api_error('Order not found.', status=404)  # don't leak existence
-
-        # Idempotency: already cancelled
-        if o.get('status') == 'cancelled':
+        # If already cancelled
+        if order.get('status') == 'cancelled':
             return api_response(
-                data={'order': serialize_order(o)},
+                data={'order': serialize_order(order)},
                 message='Order is already cancelled.',
                 status=200,
             )
 
-        # Only allow cancellation of pending / processing orders
-        CANCELLABLE = {'pending', 'processing'}
-        if o.get('status') not in CANCELLABLE:
-            return api_error(
-                f'This order cannot be cancelled (current status: {o.get("status")}).',
-                status=400,
-            )
-
         now_iso = datetime.now(timezone.utc).isoformat()
-        update_payload = {
-            'status':        'cancelled',
-            'cancelled_at':  now_iso,
-            'cancel_reason': reason,
-        }
-        if idem_key:
-            update_payload['cancel_idem_key'] = idem_key
 
-        updated = order_model.supabase.table('orders') \
-            .update(update_payload).eq('id', order_id).execute()
-        if not updated.data:
-            return api_error('Failed to cancel order. Please try again.', status=500)
+        if eligibility['needsApproval']:
+            # Create cancellation request
+            request_data = {
+                'order_id': order_id,
+                'requested_by': user_id,
+                'reason': reason,
+            }
+            if idem_key:
+                request_data['idempotency_key'] = idem_key
+            
+            result = order_model.supabase.table('cancellation_requests').insert(request_data).execute()
+            if not result.data:
+                return api_error('Failed to submit cancellation request.', status=500)
+            
+            # Notify seller
+            seller_id = None
+            if order.get('order_items'):
+                first_item = order.get('order_items')[0]
+                if first_item.get('product') and first_item['product'].get('seller_id'):
+                    seller_id = first_item['product']['seller_id']
+            
+            if seller_id:
+                notification_model.create(
+                    seller_id,
+                    'cancellation_request',
+                    'Cancellation Request',
+                    f'Buyer requested to cancel order #{order_id[:8].upper()}. Reason: {reason}',
+                    f'/seller/orders/{order_id}'
+                )
+            
+            return api_response(
+                data={'request': result.data[0]},
+                message='Cancellation request submitted. Waiting for seller approval.',
+                status=200,
+            )
+        else:
+            # Instant cancellation
+            update_payload = {
+                'status': 'cancelled',
+                'cancelled_at': now_iso,
+                'cancel_reason': reason,
+            }
+            if idem_key:
+                update_payload['cancel_idem_key'] = idem_key
 
-        # Restore stock for all items in this order
-        items = order_model.supabase.table('order_items') \
-            .select('product_id, variant_id, quantity').eq('order_id', order_id).execute()
-        for item in (items.data or []):
-            qty        = int(item.get('quantity', 0))
-            variant_id = item.get('variant_id')
-            product_id = item.get('product_id')
-            if variant_id:
-                v = order_model.supabase.table('product_variants') \
-                    .select('stock').eq('id', variant_id).limit(1).execute()
-                if v.data:
-                    order_model.supabase.table('product_variants') \
-                        .update({'stock': int(v.data[0]['stock']) + qty}) \
-                        .eq('id', variant_id).execute()
-            # Sync product total_stock
-            all_v = order_model.supabase.table('product_variants') \
-                .select('stock').eq('product_id', product_id).execute()
-            if all_v.data:
-                new_total = sum(int(x['stock']) for x in all_v.data)
-                order_model.supabase.table('products') \
-                    .update({'total_stock': new_total}).eq('id', product_id).execute()
+            updated = order_model.supabase.table('orders') \
+                .update(update_payload).eq('id', order_id).execute()
+            if not updated.data:
+                return api_error('Failed to cancel order.', status=500)
 
-        return api_response(
-            data={'order': serialize_order(updated.data[0])},
-            message='Order cancelled successfully.',
-            status=200,
-        )
+            # Restore stock
+            order_model.restore_order_stock(order_id)
+
+            # Notify seller
+            seller_id = None
+            if order.get('order_items'):
+                first_item = order.get('order_items')[0]
+                if first_item.get('product') and first_item['product'].get('seller_id'):
+                    seller_id = first_item['product']['seller_id']
+            
+            if seller_id:
+                notification_model.create(
+                    seller_id,
+                    'status_update',
+                    'Order Cancelled',
+                    f'Order #{order_id[:8].upper()} has been cancelled by buyer. Reason: {reason}',
+                    f'/seller/orders/{order_id}',
+                    data_payload={'order_id': order_id, 'new_status': 'cancelled', 'reason': reason}
+                )
+
+            return api_response(
+                data={'order': serialize_order(updated.data[0])},
+                message='Order cancelled successfully.',
+                status=200,
+            )
     except Exception as e:
         import traceback; traceback.print_exc()
         return api_error(f'Failed to cancel order: {str(e)}', status=500)
@@ -1270,13 +1451,14 @@ def api_get_profile():
             return api_error('User not found', status=404)
         return api_response(
             data={"user": {
-                'id':         user.get('id'),
-                'first_name': user.get('first_name', ''),
-                'last_name':  user.get('last_name', ''),
-                'email':      user.get('email', ''),
-                'phone':      user.get('phone', ''),
-                'gender':     user.get('gender', ''),
-                'role':       user.get('role', ''),
+                'id':              user.get('id'),
+                'first_name':      user.get('first_name', ''),
+                'last_name':       user.get('last_name', ''),
+                'email':           user.get('email', ''),
+                'phone':           user.get('phone', ''),
+                'gender':          user.get('gender', ''),
+                'role':            user.get('role', ''),
+                'profile_picture': user.get('profile_picture') or '',
             }},
             message='OK', status=200,
         )

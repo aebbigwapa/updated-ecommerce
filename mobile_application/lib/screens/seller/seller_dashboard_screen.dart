@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../../theme/app_theme.dart';
 import '../../services/api_service.dart';
 import '../../services/realtime_service.dart';
@@ -52,12 +53,15 @@ class _SellerDashboardScreenState extends State<SellerDashboardScreen>
 
   Future<void> _load() async {
     try {
-      final user = await ApiService.getCurrentUser();
-      if (user != null && mounted) {
-        setState(() {
-          _name = '${user['first_name'] ?? ''} ${user['last_name'] ?? ''}'.trim();
-        });
-        final app = await ApiService.getApplication(user['id']);
+      final prefs = await SharedPreferences.getInstance();
+      final firstName = prefs.getString('user_first_name') ?? '';
+      final lastName  = prefs.getString('user_last_name')  ?? '';
+      final userId    = prefs.getString('user_id')         ?? '';
+      if (mounted) {
+        setState(() => _name = '$firstName $lastName'.trim());
+      }
+      if (userId.isNotEmpty) {
+        final app = await ApiService.getApplication(userId);
         if (app != null && mounted) {
           setState(() => _storeName = app['store_name'] ?? 'My Store');
         }
@@ -95,6 +99,32 @@ class _SellerDashboardScreenState extends State<SellerDashboardScreen>
   }
 
   void _logout() async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: const Text('Log out?',
+            style: TextStyle(fontWeight: FontWeight.w700)),
+        content: const Text('Are you sure you want to log out?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancel',
+                style: TextStyle(color: AppTheme.textDark)),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            style: ElevatedButton.styleFrom(
+                backgroundColor: AppTheme.primaryLight,
+                foregroundColor: Colors.white,
+                shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(8))),
+            child: const Text('Yes, Log out'),
+          ),
+        ],
+      ),
+    );
+    if (confirm != true) return;
     await ApiService.logout();
     if (mounted) Navigator.pushNamedAndRemoveUntil(context, '/login', (r) => false);
   }

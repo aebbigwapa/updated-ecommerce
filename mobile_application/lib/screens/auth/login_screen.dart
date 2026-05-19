@@ -43,11 +43,11 @@ class _LoginScreenState extends State<LoginScreen> {
   void _startCountdown() {
     _countdown = 0; _msgIndex = 0;
     _countdownTimer?.cancel();
-    _countdownTimer = Timer.periodic(const Duration(milliseconds: 800), (t) {
+    _countdownTimer = Timer.periodic(const Duration(milliseconds: 400), (t) {
       if (!mounted) { t.cancel(); return; }
       setState(() {
         _countdown++;
-        _msgIndex = (_countdown ~/ 2).clamp(0, _messages.length - 1);
+        _msgIndex = (_countdown ~/ 3).clamp(0, _messages.length - 1);
       });
     });
   }
@@ -188,7 +188,7 @@ class _LoginScreenState extends State<LoginScreen> {
                               Align(
                                 alignment: Alignment.centerRight,
                                 child: TextButton(
-                                  onPressed: () {},
+                                  onPressed: () => Navigator.pushNamed(context, '/forgot-password'),
                                   child: const Text('Forgot Password?',
                                       style: TextStyle(color: AppTheme.primaryLight, fontWeight: FontWeight.w500)),
                                 ),

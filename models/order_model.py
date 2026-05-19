@@ -90,6 +90,11 @@ class OrderModel:
                     order['customer_email'] = buyer.data.get('email', '')
             order['items_count'] = sum(int(i.get('quantity', 0) or 0) for i in order.get('items', []))
             order['total'] = order.get('total_amount', 0)
+            if order.get('rider_id'):
+                rider = self.supabase.table('users').select('first_name, last_name').eq('id', order['rider_id']).single().execute()
+                if rider.data:
+                    rider_name = f"{rider.data.get('first_name', '')} {rider.data.get('last_name', '')}".strip()
+                    order['rider_name'] = rider_name or None
         return orders
     
     def create(self, order_data, items_data, cart_item_ids=None, idempotency_key=None):
@@ -182,7 +187,12 @@ class OrderModel:
         if valid_next.get(current_status) != new_status:
             return None
         
-        return self.update_status(order_id, new_status)
+        # Clear rider_id when marking as ready for pickup to make it available to riders
+        payload = {'status': new_status}
+        if new_status == 'ready_for_pickup':
+            payload['rider_id'] = None
+        result = self.supabase.table('orders').update(payload).eq('id', order_id).execute()
+        return result.data[0] if result.data else None
 
     def update_status_for_admin(self, order_id, new_status, rider_id=None):
         """Admin can override any valid order status and optionally assign a rider."""
@@ -190,8 +200,7 @@ class OrderModel:
         if new_status not in allowed:
             return None
         payload = {'status': new_status}
-        if rider_id:
-            payload['rider_id'] = rider_id
+        payload['rider_id'] = rider_id  # rider_id can be None to clear assignment
         result = self.supabase.table('orders').update(payload).eq('id', order_id).execute()
         return result.data[0] if result.data else None
 
@@ -359,6 +368,119 @@ class OrderModel:
         # Update order status to cancelled (we need to add this status to schema)
         result = self.supabase.table('orders').update({'status': 'cancelled'}).eq('id', order_id).execute()
         return result.data[0] if result.data else None
+
+    @staticmethod
+    def get_cancellation_eligibility(order, user_role, item_id=None):
+        """
+        Get cancellation eligibility for an order or order item.
+        Returns dict with canCancel, needsApproval, reasonRequired, allowedStatuses, message.
+        Hybrid Shopee/Lazada model.
+        """
+        if not order:
+            return {
+                'canCancel': False,
+                'needsApproval': False,
+                'reasonRequired': True,
+                'allowedStatuses': [],
+                'message': 'Order not found'
+            }
+        
+        status = order.get('status', '')
+        is_preorder = order.get('is_preorder', False)  # Assume field exists or add logic
+        is_custom = order.get('is_custom', False)      # Assume field exists
+        
+        # Base rules by status
+        rules = {
+            'pending': {
+                'buyer': {'canCancel': True, 'needsApproval': False, 'reasonRequired': False},
+                'seller': {'canCancel': True, 'needsApproval': False, 'reasonRequired': True},
+            },
+            'processing': {
+                'buyer': {'canCancel': True, 'needsApproval': False, 'reasonRequired': False},
+                'seller': {'canCancel': True, 'needsApproval': False, 'reasonRequired': True},
+            },
+            'ready_to_ship': {
+                'buyer': {'canCancel': True, 'needsApproval': True, 'reasonRequired': True},
+                'seller': {'canCancel': True, 'needsApproval': False, 'reasonRequired': True},
+            },
+            'shipped': {
+                'buyer': {'canCancel': False, 'needsApproval': False, 'reasonRequired': False},
+                'seller': {'canCancel': False, 'needsApproval': False, 'reasonRequired': False},
+            },
+            'out_for_delivery': {
+                'buyer': {'canCancel': True, 'needsApproval': True, 'reasonRequired': True},
+                'seller': {'canCancel': False, 'needsApproval': False, 'reasonRequired': False},
+            },
+            'delivered': {
+                'buyer': {'canCancel': False, 'needsApproval': False, 'reasonRequired': False},
+                'seller': {'canCancel': False, 'needsApproval': False, 'reasonRequired': False},
+            },
+            'cancelled': {
+                'buyer': {'canCancel': False, 'needsApproval': False, 'reasonRequired': False},
+                'seller': {'canCancel': False, 'needsApproval': False, 'reasonRequired': False},
+            }
+        }
+        
+        # Special rules for pre-order/custom items
+        if is_preorder or is_custom:
+            if status in ['pending', 'processing', 'ready_to_ship']:
+                rules[status]['buyer']['needsApproval'] = True
+                rules[status]['buyer']['reasonRequired'] = True
+        
+        # Get rule for this status and role
+        status_rules = rules.get(status, {})
+        role_rules = status_rules.get(user_role, {'canCancel': False, 'needsApproval': False, 'reasonRequired': False})
+        
+        # Build response
+        allowed_statuses = [s for s, r in rules.items() if r.get(user_role, {}).get('canCancel')]
+        message = ''
+        if not role_rules['canCancel']:
+            if status == 'shipped':
+                message = 'Order has been shipped and cannot be cancelled. Contact seller for returns.'
+            elif status == 'delivered':
+                message = 'Order has been delivered. Use return/refund process instead.'
+            elif status == 'cancelled':
+                message = 'Order is already cancelled.'
+            else:
+                message = f'Orders in {status.replace("_", " ")} status cannot be cancelled.'
+        elif role_rules['needsApproval']:
+            message = 'Cancellation requires seller approval.'
+        
+        return {
+            'canCancel': role_rules['canCancel'],
+            'needsApproval': role_rules['needsApproval'],
+            'reasonRequired': role_rules['reasonRequired'],
+            'allowedStatuses': allowed_statuses,
+            'message': message
+        }
+
+    def restore_order_stock(self, order_id):
+        """Restore stock for all items in an order"""
+        items = self.supabase.table('order_items').select('product_id, variant_id, quantity').eq('order_id', order_id).execute()
+        for item in (items.data or []):
+            qty = int(item.get('quantity', 0))
+            variant_id = item.get('variant_id')
+            product_id = item.get('product_id')
+
+            if variant_id:
+                # Restore to the specific variant
+                variant = self.supabase.table('product_variants').select('stock').eq('id', variant_id).limit(1).execute()
+                if variant.data:
+                    new_stock = int(variant.data[0].get('stock', 0)) + qty
+                    self.supabase.table('product_variants').update({'stock': new_stock}).eq('id', variant_id).execute()
+            else:
+                # No variant — restore to first variant (or distribute proportionally)
+                variants = self.supabase.table('product_variants').select('id, stock').eq('product_id', product_id).limit(1).execute()
+                if variants.data:
+                    v = variants.data[0]
+                    new_stock = int(v.get('stock', 0)) + qty
+                    self.supabase.table('product_variants').update({'stock': new_stock}).eq('id', v['id']).execute()
+
+            # Sync total_stock on the product row
+            variants = self.supabase.table('product_variants').select('stock').eq('product_id', product_id).execute()
+            if variants.data:
+                new_total = sum(int(v.get('stock', 0)) for v in variants.data)
+                self.supabase.table('products').update({'total_stock': new_total}).eq('id', product_id).execute()
 
     def get_seller_stats(self, seller_id):
         """Return delivered-only sales stats for a seller."""

@@ -111,7 +111,10 @@ async function loadOrders(filter = 'all') {
             <td>${o.customer_name || '\u2014'}</td>
             <td>${o.items_count ?? (o.items ? o.items.length : 0)}</td>
             <td>${formatCurrency(o.total)}</td>
-            <td><span class="badge badge-${o.status}">${o.status}</span></td>
+            <td>
+                <span class="badge badge-${o.status}">${o.status}</span>
+                ${o.proof_of_delivery_url ? `<div style="margin-top:4px"><a href="${o.proof_of_delivery_url}" target="_blank" style="font-size:11px;color:#198754;font-weight:600">📸 View Proof</a></div>` : ''}
+            </td>
             <td>${formatDate(o.created_at)}</td>
             <td style="display:flex;gap:6px;flex-wrap:wrap">
                 <button class="btn btn-view" onclick="viewOrder('${o.id}')">View</button>
@@ -151,7 +154,7 @@ async function updateOrderStatus(btn, id, status) {
 let _chatConvId    = null;
 let _chatPollTimer = null;
 let _chatLastMsgId = null;
-let _ME_ID         = '';
+let _ME_ID         = typeof window !== 'undefined' ? window._ME_ID || '' : '';
 const QUICK_MSG = 'Thank you for your order! We are currently processing your items. We will update you once it is ready for pickup.';
 
 async function messageBuyer(orderId, buyerId, buyerName) {
@@ -215,16 +218,25 @@ function renderChatPanel(msgs) {
 }
 
 function buildChatBubble(m) {
-    const isSent = m.sender_id === _ME_ID;
+    const sender = m.sender || {};
+    const senderId = m.sender_id || sender.id;
+    const senderName = sender.first_name ? `${sender.first_name} ${sender.last_name || ''}`.trim() : sender.name || m.sender_name || 'U';
+    const initial = (senderName || 'U')[0].toUpperCase();
+    const isSent = String(senderId) === String(_ME_ID);
     const div = document.createElement('div');
-    div.style.cssText = `display:flex;flex-direction:column;align-items:${isSent ? 'flex-end' : 'flex-start'};margin-bottom:8px`;
+    div.className = `msg-row ${isSent ? 'sent' : 'received'}`;
+
+    const avatar = `<div class="msg-avatar">${initial}</div>`;
+    const bubble = `<div class="msg-bubble">${_escHtml(m.content)}</div>`;
+    const time = `<div class="msg-time">${_fmtTime(m.created_at)}</div>`;
+
     div.innerHTML = `
-        <div style="max-width:75%;padding:9px 13px;
-            border-radius:${isSent ? '14px 14px 3px 14px' : '14px 14px 14px 3px'};
-            background:${isSent ? '#FF2BAC' : '#f0f2f5'};
-            color:${isSent ? '#fff' : '#1a1a3e'};
-            font-size:13px;line-height:1.4;word-break:break-word">${_escHtml(m.content)}</div>
-        <div style="font-size:10px;color:#adb5bd;margin-top:3px">${_fmtTime(m.created_at)}</div>
+        ${!isSent ? avatar : ''}
+        <div style="display:flex;flex-direction:column;max-width:70%">
+            ${bubble}
+            ${time}
+        </div>
+        ${isSent ? avatar : ''}
     `;
     return div;
 }
@@ -247,24 +259,22 @@ async function sendChatPanelMessage() {
     }
 }
 
-async function sendQuickReply() {
+async function sendQuickReply(message = QUICK_MSG) {
     if (!_chatConvId) return;
-    const btn = document.getElementById('quickReplyBtn');
-    if (btn) btn.disabled = true;
+
     const res = await fetch(`/messages/api/conversations/${_chatConvId}/messages`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': _getCsrf() },
-        body: JSON.stringify({ content: QUICK_MSG })
+        body: JSON.stringify({ content: message })
     }).then(r => r.json()).catch(() => null);
+
     if (res && res.id) {
         document.getElementById('chatPanelMessages').appendChild(buildChatBubble(res));
         _chatLastMsgId = res.id;
         scrollChatPanel();
-        if (btn) btn.style.display = 'none';
-        showToast('Welcome message sent!');
+        showToast('Quick reply sent!');
     } else {
-        if (btn) btn.disabled = false;
-        showToast('Failed to send.', true);
+        showToast('Failed to send message.', true);
     }
 }
 
@@ -300,21 +310,34 @@ async function loadShipping(filter = 'all') {
     const tbody = document.getElementById('shippingTable');
     if (!tbody) return;
 
-    const data     = await API.seller.getShipping().catch(() => []);
-    const filtered = filter === 'all' ? data : data.filter(s => s.status === filter);
+    const data = await API.seller.getShipping().catch(() => []);
+    const shippingStatuses = ['processing', 'ready_for_pickup', 'in_transit', 'delivered'];
+    const filtered = Array.isArray(data)
+        ? (filter === 'all' ? data : data.filter(s => s.status === filter))
+        : [];
 
     if (!filtered.length) {
-        tbody.innerHTML = `<tr><td colspan="6"><div class="empty-state"><div class="empty-icon">&#128666;</div>No active deliveries.</div></td></tr>`;
+        tbody.innerHTML = `<tr><td colspan="6"><div class="empty-state"><div class="empty-icon">&#128666;</div>No matching deliveries.</div></td></tr>`;
         return;
     }
 
+    const formatAddress = (addr) => {
+        if (!addr) return '\u2014';
+        if (typeof addr === 'string') return addr;
+        if (typeof addr === 'object') {
+            return [addr.street, addr.city, addr.province, addr.postal_code]
+                .filter(Boolean).join(', ') || '\u2014';
+        }
+        return String(addr);
+    };
+
     tbody.innerHTML = filtered.map(s => `
         <tr>
-            <td>#${(s.order_id || '').slice(0,8)}</td>
+            <td>#${(s.id || '').slice(0, 8)}</td>
             <td>${s.customer_name || '\u2014'}</td>
-            <td>${s.address || '\u2014'}</td>
+            <td>${formatAddress(s.shipping_address || s.address)}</td>
             <td>${s.rider_name || 'Unassigned'}</td>
-            <td><span class="badge badge-${s.status}">${s.status}</span></td>
+            <td><span class="badge badge-${s.status}">${s.status.replace(/_/g, ' ')}</span></td>
             <td><button class="btn btn-view">Track</button></td>
         </tr>
     `).join('');
@@ -558,4 +581,23 @@ document.addEventListener('DOMContentLoaded', () => {
 
     const storeForm = document.getElementById('storeForm');
     if (storeForm) storeForm.addEventListener('submit', saveStore);
+    
+    // Initialize message badge
+    updateMessageBadge();
+    setInterval(updateMessageBadge, 10000); // Poll every 10 seconds
 });
+
+// ── Message Notification Badge ────────────────────────────────
+async function updateMessageBadge() {
+    try {
+        const res = await fetch('/messages/api/unread-count').then(r => r.json()).catch(() => ({ count: 0 }));
+        const badge = document.getElementById('messageBadge');
+        if (badge) {
+            const count = res.count || 0;
+            badge.textContent = count;
+            badge.style.display = count > 0 ? 'inline-flex' : 'none';
+        }
+    } catch (e) {
+        console.error('Failed to fetch unread count:', e);
+    }
+}

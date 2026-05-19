@@ -95,10 +95,16 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
       if (!mounted) return;
 
       if (result['success'] == true) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Order placed successfully! 🎉'), backgroundColor: AppTheme.success),
-        );
-        Navigator.pop(context); // back to cart (which refreshes)
+        final orderId = (result['order'] as Map?)?['id']?.toString()
+            ?? (result['order'] as Map?)?['order_id']?.toString()
+            ?? '';
+        if (mounted) {
+          Navigator.pushNamedAndRemoveUntil(
+            context, '/order-summary',
+            (route) => route.settings.name == '/home',
+            arguments: orderId,
+          );
+        }
       } else {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -209,7 +215,7 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
                 style: TextStyle(fontSize: 13, color: Color(0xFF6c757d))),
             const SizedBox(height: 8),
             GestureDetector(
-              onTap: () => Navigator.pushNamed(context, '/profile'),
+              onTap: () => Navigator.pushNamed(context, '/addresses').then((_) => _loadAddresses()),
               child: const Text('+ Add New Address',
                   style: TextStyle(fontSize: 13, color: AppTheme.primaryLight, fontWeight: FontWeight.w600)),
             ),
@@ -219,7 +225,7 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
             ..._addresses.map((a) => _buildAddressCard(a)),
             const SizedBox(height: 8),
             GestureDetector(
-              onTap: () => Navigator.pushNamed(context, '/profile'),
+              onTap: () => Navigator.pushNamed(context, '/addresses').then((_) => _loadAddresses()),
               child: const Text('+ Add New Address',
                   style: TextStyle(fontSize: 13, color: AppTheme.primaryLight, fontWeight: FontWeight.w600)),
             ),

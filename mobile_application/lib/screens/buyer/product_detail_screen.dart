@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import '../../theme/app_theme.dart';
 import '../../services/api_service.dart';
+import '../../services/wishlist_service.dart';
 import '../../models/product.dart';
+import 'checkout_screen.dart';
 
 class ProductDetailScreen extends StatefulWidget {
   final String productId;
@@ -30,6 +32,8 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
     'lavender': '#e6e6fa', 'coral': '#ff6b6b', 'mint': '#98ff98', 'cream': '#fffdd0',
     'charcoal': '#36454f', 'gold': '#ffd700', 'silver': '#c0c0c0', 'rose': '#ff007f',
   };
+
+  bool _isWishlisted = false;
 
   @override
   void initState() {
@@ -123,6 +127,9 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
           }
           _isLoading = false;
         });
+        // Check wishlist state after product loads
+        final wishlisted = await WishlistService.isWishlisted(widget.productId);
+        if (mounted) setState(() => _isWishlisted = wishlisted);
       } else if (mounted) {
         setState(() => _isLoading = false);
       }
@@ -131,57 +138,67 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
     }
   }
 
-  Future<void> _buyNow() async {
-    if (_product == null) return;
-    setState(() => _isAddingToCart = true);
-    try {
-      final result = await ApiService.addToCart(
-        _product!.id, _selectedQuantity, variantId: _selectedVariantId,
-      );
-      if (mounted) {
-        if (result['success'] == true) {
-          Navigator.pushNamed(context, '/cart');
-        } else {
-          ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-            content: Text(result['message']?.toString() ?? 'Failed to add to cart'),
-            backgroundColor: Colors.red,
-          ));
-        }
-      }
-    } catch (_) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Failed to add to cart'), backgroundColor: Colors.red));
-    } finally {
-      if (mounted) setState(() => _isAddingToCart = false);
-    }
-  }
-
-  Future<List<Map<String, dynamic>>> _loadRelated() async {
-    if (_product == null) return [];
-    final all = await ApiService.getProducts(category: _product!.category);
-    return all.where((p) => p['id'] != _product!.id).take(4).toList();
-  }
-
-  Future<Map<String, dynamic>> _loadReviews() async {
-    try {
-      final token = await ApiService.getAuthToken();
-      if (token == null) return {};
-      return await ApiService.get('/api/reviews?product_id=${_product!.id}', token: token);
-    } catch (_) { return {}; }
-  }
-
   Future<void> _addToCart() async {
     if (_product == null) return;
+
+    final token = await ApiService.getAuthToken();
+    if (token == null) {
+      if (!mounted) return;
+      final goLogin = await showDialog<bool>(
+        context: context,
+        builder: (_) => AlertDialog(
+          title: const Text('Login Required'),
+          content: const Text('Please log in to add items to your cart.'),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancel')),
+            ElevatedButton(
+              onPressed: () => Navigator.pop(context, true),
+              style: ElevatedButton.styleFrom(backgroundColor: AppTheme.primaryLight),
+              child: const Text('Login'),
+            ),
+          ],
+        ),
+      );
+      if (goLogin == true && mounted) Navigator.pushNamed(context, '/login');
+      return;
+    }
+
     setState(() => _isAddingToCart = true);
     try {
       final result = await ApiService.addToCart(
         _product!.id, _selectedQuantity, variantId: _selectedVariantId,
       );
+      if (!mounted) return;
+
+      final success = result['success'] == true;
+      if (success) {
+        await ApiService.refreshCartCount();
+        if (!mounted) return;
+        _showMiniCartSheet(
+          imageUrl: _product!.imageUrl ?? '',
+          name: _product!.name,
+          variant: _selectedVariantId != null
+              ? (_product!.variants.firstWhere((v) => v.id == _selectedVariantId).value ?? '')
+              : 'Standard',
+          quantity: _selectedQuantity,
+          price: _currentPrice(),
+          totalCount: ApiService.cartCount.value,
+        );
+      }
+
       if (mounted) {
-        final success = result['success'] == true;
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-          content: Text(success ? 'Added to cart!' : (result['message']?.toString() ?? 'Failed to add to cart')),
+          content: Text(success
+              ? '🛒 Added to cart!'
+              : (result['message']?.toString() ?? 'Failed to add to cart')),
           backgroundColor: success ? AppTheme.success : Colors.red,
+          action: success
+              ? SnackBarAction(
+                  label: 'View Cart',
+                  textColor: Colors.white,
+                  onPressed: () => Navigator.pushNamed(context, '/cart'),
+                )
+              : null,
         ));
       }
     } catch (_) {
@@ -193,6 +210,215 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
     } finally {
       if (mounted) setState(() => _isAddingToCart = false);
     }
+  }
+
+  Future<void> _buyNow() async {
+    if (_product == null) return;
+    if (_product!.variants.isNotEmpty && _selectedVariantId == null) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+          content: Text('Please select a product variant first.'),
+          backgroundColor: Colors.orange,
+        ));
+      }
+      return;
+    }
+
+    final token = await ApiService.getAuthToken();
+    if (token == null) {
+      if (!mounted) return;
+      final goLogin = await showDialog<bool>(
+        context: context,
+        builder: (_) => AlertDialog(
+          title: const Text('Login Required'),
+          content: const Text('Please log in to proceed to checkout.'),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancel')),
+            ElevatedButton(
+              onPressed: () => Navigator.pop(context, true),
+              style: ElevatedButton.styleFrom(backgroundColor: AppTheme.primaryLight),
+              child: const Text('Login'),
+            ),
+          ],
+        ),
+      );
+      if (goLogin == true && mounted) Navigator.pushNamed(context, '/login');
+      return;
+    }
+
+    final stock = _currentStock();
+    if (stock <= 0) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+          content: Text('This item is out of stock.'), backgroundColor: Colors.red,
+        ));
+      }
+      return;
+    }
+
+    setState(() => _isAddingToCart = true);
+    try {
+      final buyNowItem = {
+        'id': 'buynow',
+        'product_name': _product!.name,
+        'image': _product!.imageUrl ?? '',
+        'variant': _selectedVariantId != null
+            ? (_product!.variants.firstWhere((v) => v.id == _selectedVariantId).value ?? '')
+            : 'Standard',
+        'price': _currentPrice(),
+        'quantity': _selectedQuantity,
+        'subtotal': _currentPrice() * _selectedQuantity,
+      };
+      if (!mounted) return;
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (_) => CheckoutScreen(
+            cartItems: [buyNowItem],
+            totalAmount: _currentPrice() * _selectedQuantity,
+          ),
+        ),
+      );
+    } finally {
+      if (mounted) setState(() => _isAddingToCart = false);
+    }
+  }
+
+  Future<List<Map<String, dynamic>>> _loadRelated() async {
+    if (_product == null) return [];
+    final related = await ApiService.getProducts(category: _product!.category, limit: 6);
+    return related.where((item) => item['id']?.toString() != _product!.id).toList();
+  }
+
+  Future<Map<String, dynamic>> _loadReviews() async {
+    if (_product == null) return {'reviews': [], 'stats': {'average_rating': 0.0, 'total_reviews': 0}};
+    final reviews = await ApiService.getReviews(productId: _product!.id);
+    final total = reviews.length;
+    final average = total > 0
+        ? reviews.fold<double>(0, (sum, item) => sum + ((item['rating'] as num?)?.toDouble() ?? 0)) / total
+        : 0.0;
+    final formatted = reviews.map((review) {
+      final user = review['user'] as Map<String, dynamic>?;
+      return {
+        ...review,
+        'user_name': ((user?['first_name']?.toString() ?? '') + ' ' + (user?['last_name']?.toString() ?? '')).trim(),
+      };
+    }).toList();
+    return {
+      'reviews': formatted,
+      'stats': {'average_rating': average, 'total_reviews': total},
+    };
+  }
+
+  void _showMiniCartSheet({
+    required String imageUrl,
+    required String name,
+    required String variant,
+    required int quantity,
+    required double price,
+    required int totalCount,
+  }) {
+    showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (context) {
+        return Padding(
+          padding: EdgeInsets.only(
+            left: 16,
+            right: 16,
+            top: 16,
+            bottom: MediaQuery.of(context).viewInsets.bottom + 20,
+          ),
+          child: Column(mainAxisSize: MainAxisSize.min, children: [
+            Container(
+              width: 48,
+              height: 4,
+              decoration: BoxDecoration(
+                color: Colors.grey.shade300,
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
+            const SizedBox(height: 16),
+            Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
+              const Text('Added to cart',
+                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700)),
+              Text('$totalCount item${totalCount != 1 ? 's' : ''}',
+                  style: const TextStyle(fontSize: 13, color: AppTheme.textLight)),
+            ]),
+            const SizedBox(height: 16),
+            Row(children: [
+              Container(
+                width: 72,
+                height: 72,
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(16),
+                  color: AppTheme.grayLight,
+                ),
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(16),
+                  child: imageUrl.isNotEmpty
+                      ? Image.network(imageUrl, fit: BoxFit.cover,
+                          errorBuilder: (_, __, ___) => const Icon(Icons.image_outlined, size: 32, color: AppTheme.textLight))
+                      : const Icon(Icons.image_outlined, size: 32, color: AppTheme.textLight),
+                ),
+              ),
+              const SizedBox(width: 14),
+              Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                Text(name, style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w700), maxLines: 2, overflow: TextOverflow.ellipsis),
+                const SizedBox(height: 6),
+                Text(variant, style: const TextStyle(fontSize: 12, color: AppTheme.textLight)),
+                const SizedBox(height: 6),
+                Text('Qty $quantity · ₱${(price * quantity).toStringAsFixed(2)}',
+                    style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: AppTheme.textDark)),
+              ])),
+            ]),
+            const SizedBox(height: 20),
+            Row(children: [
+              Expanded(
+                child: OutlinedButton(
+                  onPressed: () {
+                    Navigator.pop(context);
+                    Navigator.pushNamed(context, '/cart');
+                  },
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: AppTheme.textDark,
+                    side: const BorderSide(color: AppTheme.border),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                  ),
+                  child: const Text('View Cart', style: TextStyle(fontWeight: FontWeight.w600)),
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: ElevatedButton(
+                  onPressed: () async {
+                    Navigator.pop(context);
+                    final cartItems = await ApiService.getCart();
+                    final total = cartItems.fold<double>(0, (sum, item) => sum + ((item['subtotal'] as num? ?? 0).toDouble()));
+                    if (!mounted) return;
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(builder: (_) => CheckoutScreen(cartItems: cartItems, totalAmount: total)),
+                    );
+                  },
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppTheme.primaryLight,
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                  ),
+                  child: const Text('Checkout', style: TextStyle(fontWeight: FontWeight.w600)),
+                ),
+              ),
+            ]),
+            const SizedBox(height: 12),
+          ]),
+        );
+      },
+    );
   }
 
   @override
@@ -210,6 +436,33 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
                   fontWeight: FontWeight.w600, color: AppTheme.white)),
         ),
         actions: [
+          // Wishlist heart button
+          if (_product != null)
+            IconButton(
+              icon: Icon(
+                _isWishlisted ? Icons.favorite : Icons.favorite_border,
+                color: _isWishlisted ? AppTheme.primaryLight : const Color(0xFF1a1a3e),
+              ),
+              tooltip: _isWishlisted ? 'Remove from wishlist' : 'Add to wishlist',
+              onPressed: () async {
+                if (_product == null) return;
+                final added = await WishlistService.toggle({
+                  'id':          _product!.id,
+                  'name':        _product!.name,
+                  'price':       _product!.price,
+                  'image':       _product!.imageUrl,
+                  'seller_name': _product!.sellerName ?? '',
+                  'total_stock': _product!.stock,
+                });
+                if (mounted) {
+                  setState(() => _isWishlisted = added);
+                  ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+                    content: Text(added ? '❤️ Added to wishlist!' : 'Removed from wishlist.'),
+                    duration: const Duration(seconds: 2),
+                  ));
+                }
+              },
+            ),
           IconButton(
             icon: const Icon(Icons.shopping_cart_outlined),
             onPressed: () => Navigator.pushNamed(context, '/cart'),

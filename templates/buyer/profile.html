@@ -37,10 +37,31 @@
 
             <!-- Avatar + name banner -->
             <div class="settings-card mb-3 d-flex align-items-center gap-4 flex-wrap">
-                <div style="width:80px;height:80px;border-radius:50%;background:linear-gradient(135deg,#FF2BAC,#FF9ED6);
-                            display:flex;align-items:center;justify-content:center;
-                            font-size:32px;flex-shrink:0;color:#fff;font-weight:700">
-                    {{ (session.user.first_name or session.user.name or 'U')[0]|upper }}
+                <div style="position:relative;width:80px;height:80px;flex-shrink:0">
+                    {% if profile.profile_picture %}
+                    <img id="avatarImg" src="{{ profile.profile_picture }}" alt="Avatar"
+                         style="width:80px;height:80px;border-radius:50%;object-fit:cover;border:3px solid #FF2BAC">
+                    {% else %}
+                    <div id="avatarImg" style="width:80px;height:80px;border-radius:50%;background:linear-gradient(135deg,#FF2BAC,#FF9ED6);
+                                display:flex;align-items:center;justify-content:center;
+                                font-size:32px;color:#fff;font-weight:700">
+                        {{ (session.user.first_name or session.user.name or 'U')[0]|upper }}
+                    </div>
+                    {% endif %}
+                    <label for="avatarInput" title="Change photo"
+                           style="position:absolute;bottom:0;right:0;width:26px;height:26px;border-radius:50%;
+                                  background:#FF2BAC;display:flex;align-items:center;justify-content:center;
+                                  cursor:pointer;border:2px solid #fff;box-shadow:0 1px 4px rgba(0,0,0,.2)">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" fill="white" viewBox="0 0 16 16">
+                          <path d="M10.5 8.5a2.5 2.5 0 1 1-5 0 2.5 2.5 0 0 1 5 0z"/>
+                          <path d="M2 4a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V6a2 2 0 0 0-2-2h-1.172a2 2 0 0 1-1.414-.586l-.828-.828A2 2 0 0 0 9.172 2H6.828a2 2 0 0 0-1.414.586l-.828.828A2 2 0 0 0 3.172 4H2zm.5 2a.5.5 0 1 1 0-1 .5.5 0 0 1 0 1zm9 2.5a3.5 3.5 0 1 1-7 0 3.5 3.5 0 0 1 7 0z"/>
+                        </svg>
+                    </label>
+                    <input id="avatarInput" type="file" accept="image/*" style="display:none">
+                    <div id="avatarSpinner" style="display:none;position:absolute;inset:0;border-radius:50%;
+                         background:rgba(0,0,0,.4);align-items:center;justify-content:center">
+                        <div class="spinner-border spinner-border-sm text-white"></div>
+                    </div>
                 </div>
                 <div>
                     <div style="font-family:'Playfair Display',serif;font-size:20px;font-weight:700;color:#1a1a3e">
@@ -138,5 +159,60 @@
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
 <script src="{{ url_for('static', filename='js/api.js') }}"></script>
 <script src="{{ url_for('static', filename='js/shop.js') }}"></script>
+<script>
+(function () {
+  const input   = document.getElementById('avatarInput');
+  const spinner = document.getElementById('avatarSpinner');
+  const imgWrap = document.getElementById('avatarImg');
+
+  input.addEventListener('change', async function () {
+    const file = this.files[0];
+    if (!file) return;
+    spinner.style.display = 'flex';
+    const fd = new FormData();
+    fd.append('photo', file);
+    try {
+      const token = localStorage.getItem('auth_token') || '';
+      const res = await fetch('/api/profile/picture', {
+        method: 'POST',
+        headers: token ? { 'Authorization': 'Bearer ' + token } : {},
+        body: fd,
+        credentials: 'include',
+      });
+      const data = await res.json();
+      if (res.ok && data.data && data.data.profile_picture) {
+        const url = data.data.profile_picture;
+        if (imgWrap.tagName === 'IMG') {
+          imgWrap.src = url;
+        } else {
+          const img = document.createElement('img');
+          img.id = 'avatarImg';
+          img.src = url;
+          img.alt = 'Avatar';
+          img.style.cssText = 'width:80px;height:80px;border-radius:50%;object-fit:cover;border:3px solid #FF2BAC';
+          imgWrap.replaceWith(img);
+        }
+        showToast('Profile picture updated!');
+      } else {
+        showToast(data.error || 'Upload failed', true);
+      }
+    } catch (e) {
+      showToast('Upload failed', true);
+    } finally {
+      spinner.style.display = 'none';
+      input.value = '';
+    }
+  });
+
+  function showToast(msg, isError) {
+    const t = document.getElementById('shopToast');
+    if (!t) return;
+    t.textContent = msg;
+    t.style.background = isError ? '#e53e3e' : '#FF2BAC';
+    t.classList.add('show');
+    setTimeout(() => t.classList.remove('show'), 3000);
+  }
+})();
+</script>
 </body>
 </html>

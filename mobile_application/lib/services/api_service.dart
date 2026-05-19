@@ -1,5 +1,7 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+import 'package:flutter/foundation.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:http/http.dart' as http;
@@ -9,13 +11,15 @@ class ApiService {
   static const String supabaseAnonKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im9wdXNyb3RxaHRraG1lZWZ2eWRoIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzc1NTU3MzMsImV4cCI6MjA5MzEzMTczM30.-Lo362tNRftWbvXK2kds7r5CpDeXb5vYN6K3rBhQlvw';
 
   // Flask backend base URL
-  // Android emulator: http://10.0.2.2:5000
-  // Physical device via USB (adb reverse): http://localhost:5000
-  // Physical device via WiFi: http://192.168.1.172:5000
-  static const String flaskBaseUrl = String.fromEnvironment(
-    'FLASK_BASE_URL',
-    defaultValue: 'http://localhost:5000',
-  );
+  // Use your machine IP for physical devices on the same Wi-Fi.
+  // Override using --dart-define=FLASK_BASE_URL=http://<host-ip>:5000
+  static final String flaskBaseUrl = () {
+    const envUrl = String.fromEnvironment('FLASK_BASE_URL');
+    if (envUrl.isNotEmpty) return envUrl;
+    return 'http://192.168.123.36:5000';
+  }();
+
+  static final ValueNotifier<int> cartCount = ValueNotifier<int>(0);
 
   static SupabaseClient get client => Supabase.instance.client;
 
@@ -67,7 +71,7 @@ class ApiService {
         Uri.parse('$flaskBaseUrl/api/auth/login'),
         headers: {'Content-Type': 'application/json', 'X-Client-Type': 'mobile'},
         body: jsonEncode({'email': email.trim().toLowerCase(), 'password': password}),
-      );
+      ).timeout(const Duration(seconds: 30));
       final body = _decodeJson(res.body);
       if (res.statusCode == 200) {
         final data  = body['data'] is Map ? Map<String, dynamic>.from(body['data'] as Map) : <String, dynamic>{};
@@ -79,6 +83,8 @@ class ApiService {
         }
       }
       return {'success': false, 'message': body['error']?.toString() ?? body['message']?.toString() ?? 'Invalid email or password'};
+    } on TimeoutException {
+      return {'success': false, 'message': 'Connection timed out. Make sure the server is running and reachable.'};
     } catch (e) {
       return {'success': false, 'message': 'Error: $e'};
     }
@@ -193,17 +199,48 @@ class ApiService {
     }
   }
 
-  static Future<Map<String, dynamic>> verifyOtpFlask(String email, String otp) async {
+  static Future<Map<String, dynamic>> verifyOtpFlask(String email, String otp, {String purpose = ''}) async {
     try {
       final res = await http.post(
         Uri.parse('$flaskBaseUrl/api/auth/verify-otp'),
         headers: {'Content-Type': 'application/json'},
-        body: '{"email":"${email.trim().toLowerCase()}","otp":"${otp.trim()}"}',
+        body: jsonEncode({
+          'email': email.trim().toLowerCase(),
+          'otp': otp.trim(),
+          'purpose': purpose,
+        }),
       );
       final body = _decodeJson(res.body);
       return {'success': res.statusCode == 200, 'message': body['message'] ?? body['error'] ?? ''};
     } catch (e) {
       return {'success': false, 'message': 'Network error: $e'};
+    }
+  }
+
+  static Future<Map<String, dynamic>> resetPasswordFlask(String email, String otp, String newPassword) async {
+    try {
+      final uri = Uri.parse('$flaskBaseUrl/api/auth/reset-password');
+      print('Sending reset-password request to: $uri');
+      final res = await http.post(
+        uri,
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode({
+          'email': email.trim().toLowerCase(),
+          'otp': otp.trim(),
+          'new_password': newPassword,
+        }),
+      ).timeout(const Duration(seconds: 15));
+      final body = _decodeJson(res.body);
+      print('Reset-password response: status=${res.statusCode}, body=$body');
+      return {'success': res.statusCode == 200, 'message': body['message'] ?? body['error'] ?? ''};
+    } on TimeoutException {
+      final msg = 'Connection timeout. Check if backend server is running at $flaskBaseUrl';
+      print('Reset-password error: $msg');
+      return {'success': false, 'message': msg};
+    } catch (e) {
+      final msg = 'Network error: $e. Backend: $flaskBaseUrl';
+      print('Reset-password exception: $msg');
+      return {'success': false, 'message': msg};
     }
   }
 
@@ -299,6 +336,156 @@ class ApiService {
     } catch (e) { return {'success': false, 'message': e.toString()}; }
   }
 
+  static Future<Map<String, dynamic>> riderDeclineDelivery(String orderId, String token, String reason, {String note = ''}) async {
+    try {
+      final res = await http.post(
+        Uri.parse('$flaskBaseUrl/api/rider/deliveries/$orderId/decline'),
+        headers: {'Authorization': 'Bearer $token', 'Content-Type': 'application/json'},
+        body: jsonEncode({'reason': reason, 'note': note}),
+      ).timeout(const Duration(seconds: 10));
+      final body = _decodeJson(res.body);
+      return {'success': res.statusCode == 200, 'message': body['message']?.toString() ?? ''};
+    } catch (e) { return {'success': false, 'message': e.toString()}; }
+  }
+
+  static Future<Map<String, dynamic>> riderReportIssue(String orderId, String token, String reason, {String note = ''}) async {
+    try {
+      final res = await http.post(
+        Uri.parse('$flaskBaseUrl/api/rider/deliveries/$orderId/report'),
+        headers: {'Authorization': 'Bearer $token', 'Content-Type': 'application/json'},
+        body: jsonEncode({'reason': reason, 'note': note}),
+      ).timeout(const Duration(seconds: 10));
+      final body = _decodeJson(res.body);
+      return {'success': res.statusCode == 200, 'message': body['message']?.toString() ?? ''};
+    } catch (e) { return {'success': false, 'message': e.toString()}; }
+  }
+
+  static Future<Map<String, dynamic>> riderUploadProof(String orderId, String token, File imageFile) async {
+    try {
+      final uri = Uri.parse('$flaskBaseUrl/api/rider/deliveries/$orderId/proof');
+      final req = http.MultipartRequest('POST', uri);
+      req.headers['Authorization'] = 'Bearer $token';
+      req.files.add(await http.MultipartFile.fromPath('proof_image', imageFile.path));
+      final streamed = await req.send().timeout(const Duration(seconds: 30));
+      final body = _decodeJson(await streamed.stream.bytesToString());
+      return {'success': streamed.statusCode == 200, 'message': body['message']?.toString() ?? '', 'proof_url': (body['data'] is Map) ? (body['data'] as Map)['proof_url'] : null};
+    } catch (e) { return {'success': false, 'message': e.toString()}; }
+  }
+
+  static Future<Map<String, dynamic>> riderGetDeclineReasons(String token) async {
+    try {
+      final res = await http.get(
+        Uri.parse('$flaskBaseUrl/api/rider/decline-reasons'),
+        headers: {'Authorization': 'Bearer $token'},
+      ).timeout(const Duration(seconds: 10));
+      final body = _decodeJson(res.body);
+      final data = body['data'];
+      return data is Map ? Map<String, dynamic>.from(data as Map) : {};
+    } catch (_) { return {}; }
+  }
+
+  static Future<Map<String, dynamic>> riderGetAvailability(String token) async {
+    try {
+      final res = await http.get(
+        Uri.parse('$flaskBaseUrl/api/rider/availability'),
+        headers: {'Authorization': 'Bearer $token'},
+      ).timeout(const Duration(seconds: 10));
+      final body = _decodeJson(res.body);
+      final data = body['data'];
+      return data is Map ? Map<String, dynamic>.from(data as Map) : {};
+    } catch (_) { return {}; }
+  }
+
+  static Future<Map<String, dynamic>> riderSetAvailability(String token, bool isAvailable) async {
+    try {
+      final res = await http.post(
+        Uri.parse('$flaskBaseUrl/api/rider/availability'),
+        headers: {'Authorization': 'Bearer $token', 'Content-Type': 'application/json'},
+        body: jsonEncode({'is_available': isAvailable}),
+      ).timeout(const Duration(seconds: 10));
+      final body = _decodeJson(res.body);
+      return {'success': res.statusCode == 200, 'is_available': (body['data'] is Map) ? (body['data'] as Map)['is_available'] : isAvailable};
+    } catch (e) { return {'success': false}; }
+  }
+
+  static Future<Map<String, dynamic>> riderGetPerformance(String token) async {
+    try {
+      final res = await http.get(
+        Uri.parse('$flaskBaseUrl/api/rider/performance'),
+        headers: {'Authorization': 'Bearer $token'},
+      ).timeout(const Duration(seconds: 10));
+      final body = _decodeJson(res.body);
+      final data = body['data'];
+      return data is Map ? Map<String, dynamic>.from(data as Map) : {};
+    } catch (_) { return {}; }
+  }
+
+  static Future<Map<String, dynamic>> riderGetNotifications(String token) async {
+    try {
+      final res = await http.get(
+        Uri.parse('$flaskBaseUrl/api/rider/notifications'),
+        headers: {'Authorization': 'Bearer $token'},
+      ).timeout(const Duration(seconds: 10));
+      final body = _decodeJson(res.body);
+      final data = body['data'];
+      return data is Map ? Map<String, dynamic>.from(data as Map) : {};
+    } catch (_) { return {}; }
+  }
+
+  static Future<void> riderMarkNotifsRead(String token) async {
+    try {
+      await http.post(
+        Uri.parse('$flaskBaseUrl/api/rider/notifications/read-all'),
+        headers: {'Authorization': 'Bearer $token'},
+      ).timeout(const Duration(seconds: 10));
+    } catch (_) {}
+  }
+
+  static Future<Map<String, dynamic>> getBuyerNotifications(String token) async {
+    try {
+      final res = await http.get(
+        Uri.parse('$flaskBaseUrl/api/buyer/notifications'),
+        headers: {'Authorization': 'Bearer $token'},
+      ).timeout(const Duration(seconds: 10));
+      final body = _decodeJson(res.body);
+      final data = body['data'];
+      return data is Map ? Map<String, dynamic>.from(data as Map) : {};
+    } catch (_) { return {}; }
+  }
+
+  static Future<void> markBuyerNotifsRead(String token) async {
+    try {
+      await http.post(
+        Uri.parse('$flaskBaseUrl/api/buyer/notifications/read-all'),
+        headers: {'Authorization': 'Bearer $token'},
+      ).timeout(const Duration(seconds: 10));
+    } catch (_) {}
+  }
+
+  static Future<Map<String, dynamic>> riderGetProfile(String token) async {
+    try {
+      final res = await http.get(
+        Uri.parse('$flaskBaseUrl/api/rider/profile'),
+        headers: {'Authorization': 'Bearer $token'},
+      ).timeout(const Duration(seconds: 10));
+      final body = _decodeJson(res.body);
+      final data = body['data'];
+      return data is Map ? Map<String, dynamic>.from(data as Map) : {};
+    } catch (_) { return {}; }
+  }
+
+  static Future<Map<String, dynamic>> riderSaveProfile(String token, Map<String, dynamic> payload) async {
+    try {
+      final res = await http.post(
+        Uri.parse('$flaskBaseUrl/api/rider/profile'),
+        headers: {'Authorization': 'Bearer $token', 'Content-Type': 'application/json'},
+        body: jsonEncode(payload),
+      ).timeout(const Duration(seconds: 10));
+      final body = _decodeJson(res.body);
+      return {'success': res.statusCode == 200, 'message': body['message']?.toString() ?? ''};
+    } catch (e) { return {'success': false, 'message': e.toString()}; }
+  }
+
   static Future<Map<String, dynamic>> getAdminStats(String token) async {
     try {
       final res = await http.get(
@@ -315,6 +502,94 @@ class ApiService {
     } catch (_) {
       return {};
     }
+  }
+
+  // ── Messages API ───────────────────────────────────────────────
+
+  static Future<List<Map<String, dynamic>>> getConversations(String token) async {
+    try {
+      final res = await http.get(
+        Uri.parse('$flaskBaseUrl/api/messages/conversations'),
+        headers: {'Authorization': 'Bearer $token'},
+      ).timeout(const Duration(seconds: 10));
+      final body = _decodeJson(res.body);
+      if (res.statusCode == 200) {
+        final data = body['data'];
+        if (data is List) {
+          return List<Map<String, dynamic>>.from(
+              data.map((e) => Map<String, dynamic>.from(e as Map)));
+        }
+      }
+      return [];
+    } catch (_) { return []; }
+  }
+
+  static Future<Map<String, dynamic>> startConversation(
+      String token, String otherId, {String? orderId}) async {
+    try {
+      final res = await http.post(
+        Uri.parse('$flaskBaseUrl/api/messages/conversations'),
+        headers: {'Authorization': 'Bearer $token', 'Content-Type': 'application/json'},
+        body: jsonEncode({'other_id': otherId, if (orderId != null) 'order_id': orderId}),
+      ).timeout(const Duration(seconds: 10));
+      final body = _decodeJson(res.body);
+      return body['data'] is Map
+          ? Map<String, dynamic>.from(body['data'] as Map)
+          : {};
+    } catch (_) { return {}; }
+  }
+
+  static Future<List<Map<String, dynamic>>> getMessages(
+      String token, String convId, {String? afterId}) async {
+    try {
+      final uri = afterId != null
+          ? Uri.parse('$flaskBaseUrl/api/messages/conversations/$convId/messages?after=$afterId')
+          : Uri.parse('$flaskBaseUrl/api/messages/conversations/$convId/messages');
+      final res = await http.get(uri,
+          headers: {'Authorization': 'Bearer $token'})
+          .timeout(const Duration(seconds: 10));
+      final body = _decodeJson(res.body);
+      if (res.statusCode == 200) {
+        final data = body['data'];
+        if (data is List) {
+          return List<Map<String, dynamic>>.from(
+              data.map((e) => Map<String, dynamic>.from(e as Map)));
+        }
+      }
+      return [];
+    } catch (_) { return []; }
+  }
+
+  static Future<Map<String, dynamic>?> sendMessage(
+      String token, String convId, String content) async {
+    try {
+      final res = await http.post(
+        Uri.parse('$flaskBaseUrl/api/messages/conversations/$convId/messages'),
+        headers: {'Authorization': 'Bearer $token', 'Content-Type': 'application/json'},
+        body: jsonEncode({'content': content}),
+      ).timeout(const Duration(seconds: 10));
+      final body = _decodeJson(res.body);
+      if (res.statusCode == 201) {
+        final data = body['data'];
+        return data is Map ? Map<String, dynamic>.from(data as Map) : null;
+      }
+      return null;
+    } catch (_) { return null; }
+  }
+
+  static Future<int> getUnreadMessageCount(String token) async {
+    try {
+      final res = await http.get(
+        Uri.parse('$flaskBaseUrl/api/messages/unread-count'),
+        headers: {'Authorization': 'Bearer $token'},
+      ).timeout(const Duration(seconds: 5));
+      final body = _decodeJson(res.body);
+      if (res.statusCode == 200) {
+        final data = body['data'];
+        return (data is Map ? data['count'] : null) as int? ?? 0;
+      }
+      return 0;
+    } catch (_) { return 0; }
   }
 
   // ── Legacy Supabase OTP (kept for compatibility) ─────────────
@@ -661,6 +936,17 @@ class ApiService {
       }
       return [];
     } catch (e) { return []; }
+  }
+
+  static Future<int> getCartCount() async {
+    final items = await getCart();
+    final count = items.fold<int>(0, (sum, item) => sum + ((item['quantity'] as num?)?.toInt() ?? 1));
+    cartCount.value = count;
+    return count;
+  }
+
+  static Future<int> refreshCartCount() async {
+    return getCartCount();
   }
 
   // ── Orders ───────────────────────────────────────────────────

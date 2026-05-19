@@ -13,8 +13,42 @@ class UserModel:
         return result.data[0] if result.data else None
 
     def get_by_email(self, email):
-        result = self.supabase.table('users').select('*').eq('email', email).limit(1).execute()
-        return result.data[0] if result.data else None
+        if not email:
+            return None
+
+        normalized_email = str(email).strip()
+        normalized_lower = normalized_email.lower()
+        result = self.supabase.table('users').select('*').eq('email', normalized_email).limit(1).execute()
+        if result.data:
+            return result.data[0]
+
+        # Fallback to case-insensitive lookup for email values that may not have been normalized.
+        try:
+            result = self.supabase.table('users').select('*').filter('email', 'ilike', normalized_email).limit(1).execute()
+            if result.data:
+                return result.data[0]
+        except Exception:
+            pass
+
+        # Final fallback: scan stored emails if the client library or row filter isn't available.
+        try:
+            result = self.supabase.table('users').select('id,email,password,failed_attempts,lock_until').execute()
+            for row in (result.data or []):
+                if str(row.get('email', '')).strip().lower() == normalized_lower:
+                    return row
+        except Exception:
+            pass
+
+        # Final fallback: scan stored emails if the client library or row filter isn't available.
+        try:
+            result = self.supabase.table('users').select('id,email,password,failed_attempts,lock_until').execute()
+            for row in (result.data or []):
+                if str(row.get('email', '')).strip().lower() == normalized_email.lower():
+                    return row
+        except Exception:
+            pass
+
+        return None
 
     def get_all(self):
         result = self.supabase.table('users').select('*').execute()

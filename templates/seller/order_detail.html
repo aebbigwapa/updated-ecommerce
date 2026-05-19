@@ -122,7 +122,25 @@
                             <span class="info-label">Status</span>
                             <span class="info-value">{{ order.status | replace('_', ' ') }}</span>
                         </div>
-</div>
+                        {% if order.rider %}
+                        <div class="info-row">
+                            <span class="info-label">Rider</span>
+                            <span class="info-value">{{ order.rider.first_name }} {{ order.rider.last_name }}</span>
+                        </div>
+                        {% endif %}
+                    </div>
+                    {% if order.proof_of_delivery_url %}
+                    <div class="card">
+                        <h3 class="card-title">📸 Proof of Delivery</h3>
+                        <a href="{{ order.proof_of_delivery_url }}" target="_blank">
+                            <img src="{{ order.proof_of_delivery_url }}" alt="Proof of Delivery"
+                                style="width:100%;border-radius:8px;cursor:pointer;box-shadow:0 2px 8px rgba(0,0,0,.1)" />
+                        </a>
+                        {% if order.proof_uploaded_at %}
+                        <div style="font-size:11px;color:#6c757d;margin-top:8px">Uploaded: {{ order.proof_uploaded_at[:16] | replace('T',' ') }}</div>
+                        {% endif %}
+                    </div>
+                    {% endif %}
                                                <div class="card">
                         <button class="btn-action w-100" onclick="messageBuyer('{{ order.id }}', '{{ order.buyer_id }}', '{{ (order.buyer.first_name if order.buyer else '') }} {{ (order.buyer.last_name if order.buyer else '') }}')">&#128172; Message Buyer</button>
                     </div>

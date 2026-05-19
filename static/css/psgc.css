@@ -41,10 +41,12 @@
     box-shadow: 0 0 0 3px rgba(255, 107, 206, 0.1);
 }
 
-.addr-select:disabled {
+.addr-select:disabled,
+.addr-input:disabled {
     background: #f8f9fa;
     color: #adb5bd;
     cursor: not-allowed;
+    opacity: 0.6;
 }
 
 .select-wrapper {

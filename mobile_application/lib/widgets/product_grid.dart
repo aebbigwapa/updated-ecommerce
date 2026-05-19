@@ -20,81 +20,106 @@ class ProductGrid extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.all(AppTheme.xl),
+      padding: const EdgeInsets.fromLTRB(
+        AppTheme.md, AppTheme.lg, AppTheme.md, AppTheme.lg,
+      ),
       color: AppTheme.white,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          // Header row — Expanded prevents right overflow
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            crossAxisAlignment: CrossAxisAlignment.center,
             children: [
-              Text(
-                title,
-                style: const TextStyle(
-                  fontFamily: AppTheme.fontDisplay,
-                  fontSize: 32,
-                  fontWeight: FontWeight.w600,
-                  color: AppTheme.textDark,
+              Expanded(
+                child: Text(
+                  title,
+                  style: const TextStyle(
+                    fontFamily: AppTheme.fontDisplay,
+                    fontSize: 22,
+                    fontWeight: FontWeight.w600,
+                    color: AppTheme.textDark,
+                  ),
+                  overflow: TextOverflow.ellipsis,
+                  maxLines: 1,
                 ),
               ),
-              if (viewAllRoute != null)
+              if (viewAllRoute != null) ...[
+                const SizedBox(width: 8),
                 TextButton(
-                  onPressed: () {
-                    Navigator.pushNamed(context, viewAllRoute!);
-                  },
-                  child: Text(
+                  onPressed: () => Navigator.pushNamed(context, viewAllRoute!),
+                  style: TextButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    minimumSize: Size.zero,
+                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                  ),
+                  child: const Text(
                     'View All',
                     style: TextStyle(
+                      fontFamily: AppTheme.fontBody,
+                      fontSize: 13,
                       color: AppTheme.primaryLight,
                       fontWeight: FontWeight.w600,
                     ),
                   ),
                 ),
+              ],
             ],
           ),
-          const SizedBox(height: AppTheme.lg),
-          
+          const SizedBox(height: AppTheme.md),
+
           if (isLoading)
             const Center(
-              child: CircularProgressIndicator(
-                color: AppTheme.primaryLight,
+              child: Padding(
+                padding: EdgeInsets.all(AppTheme.xl),
+                child: CircularProgressIndicator(color: AppTheme.primaryLight),
               ),
             )
           else if (products.isEmpty)
             Center(
-              child: Column(
-                children: [
-                  const Icon(
-                    Icons.inventory_2_outlined,
-                    size: 64,
-                    color: AppTheme.textLight,
-                  ),
-                  const SizedBox(height: AppTheme.md),
-                  Text(
-                    'No products found',
-                    style: const TextStyle(
-                      fontSize: 18,
-                      color: AppTheme.textLight,
-                      fontWeight: FontWeight.w500,
+              child: Padding(
+                padding: const EdgeInsets.all(AppTheme.xl),
+                child: Column(
+                  children: [
+                    const Icon(Icons.inventory_2_outlined,
+                        size: 48, color: AppTheme.textLight),
+                    const SizedBox(height: AppTheme.sm),
+                    const Text(
+                      'No products found',
+                      style: TextStyle(
+                        fontSize: 15,
+                        color: AppTheme.textLight,
+                        fontWeight: FontWeight.w500,
+                      ),
                     ),
-                  ),
-                ],
+                  ],
+                ),
               ),
             )
           else
-            GridView.builder(
-              shrinkWrap: true,
-              physics: const NeverScrollableScrollPhysics(),
-              gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                crossAxisCount: 2,
-                crossAxisSpacing: AppTheme.md,
-                mainAxisSpacing: AppTheme.md,
-                childAspectRatio: 0.72,
-              ),
-              itemCount: products.length,
-              itemBuilder: (context, index) {
-                final product = products[index];
-                return ProductCard(product: product);
+            // LayoutBuilder drives a responsive childAspectRatio
+            LayoutBuilder(
+              builder: (context, constraints) {
+                // card width = (total - spacing) / 2
+                final cardWidth = (constraints.maxWidth - AppTheme.sm) / 2;
+                // image is square (cardWidth), info section ~110px
+                final cardHeight = cardWidth + 110;
+                final ratio = cardWidth / cardHeight;
+
+                return GridView.builder(
+                  shrinkWrap: true,
+                  physics: const NeverScrollableScrollPhysics(),
+                  gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                    crossAxisCount: 2,
+                    crossAxisSpacing: AppTheme.sm,
+                    mainAxisSpacing: AppTheme.sm,
+                    childAspectRatio: ratio,
+                  ),
+                  itemCount: products.length,
+                  itemBuilder: (context, index) =>
+                      ProductCard(product: products[index]),
+                );
               },
             ),
         ],

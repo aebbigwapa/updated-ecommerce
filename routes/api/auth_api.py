@@ -55,7 +55,7 @@ def api_login():
         pass
 
     return api_response(
-        data={'token': token, 'user': user},
+        data={'token': token, 'user': user, 'should_merge_cart': True},
         message='Login successful',
         status=200,
     )
@@ -232,13 +232,64 @@ def api_verify_otp():
 
     record     = row.data[0]
     expires_at = datetime.fromisoformat(record['expires_at'].replace('Z', '+00:00'))
+    purpose    = str(data.get('purpose') or '').strip().lower()
 
     if datetime.now(timezone.utc) > expires_at:
         return api_error("OTP has expired. Please request a new one.", status=400)
 
-    sb.table('email_otps').delete().eq('email', email).execute()
+    if purpose != 'password_reset':
+        sb.table('email_otps').delete().eq('email', email).execute()
 
     return api_response(message="Email verified successfully", status=200)
+
+
+@auth_api_bp.post('/auth/reset-password')
+def api_reset_password():
+    data         = get_json_body()
+    email        = str(data.get('email') or '').strip().lower()
+    otp          = str(data.get('otp') or '').strip()
+    new_password = str(data.get('new_password') or '').strip()
+
+    if not email or not otp or not new_password:
+        return api_error("Email, OTP, and new password are required", status=400)
+
+    import os
+    from datetime import datetime, timezone
+    from supabase import create_client
+    from security import validate_password, hash_password
+    from models.user_model import UserModel
+
+    is_valid, error_msg = validate_password(new_password)
+    if not is_valid:
+        return api_error(error_msg, status=400)
+
+    sb  = create_client(os.getenv('SUPABASE_URL'), os.getenv('SUPABASE_SERVICE_ROLE_KEY'))
+    row = sb.table('email_otps').select('*').eq('email', email).eq('otp', otp).execute()
+    if not row.data:
+        return api_error("Invalid OTP", status=400)
+
+    record     = row.data[0]
+    expires_at = datetime.fromisoformat(record['expires_at'].replace('Z', '+00:00'))
+    if datetime.now(timezone.utc) > expires_at:
+        return api_error("OTP has expired. Please request a new one.", status=400)
+
+    user_data = UserModel().get_by_email(email)
+    if not user_data:
+        return api_error("User not found", status=404)
+
+    UserModel().update(user_data['id'], {
+        'password':       hash_password(new_password),
+        'failed_attempts': 0,
+        'lock_until':      None,
+    })
+    sb.table('email_otps').delete().eq('email', email).execute()
+
+    return api_response(message="Password reset successfully", status=200)
+
+
+@auth_api_bp.post('/auth/reset_password')
+def api_reset_password_alias():
+    return api_reset_password()
 
 
 @auth_api_bp.post('/auth/logout')
@@ -248,6 +299,31 @@ def api_logout():
     except Exception:
         pass
     return api_response(message="Logged out", status=200)
+
+
+@auth_api_bp.post('/profile/picture')
+@token_required
+def api_upload_profile_picture():
+    """Upload/replace profile picture for any authenticated role."""
+    user = get_current_user() or {}
+    user_id = user.get('id')
+    if not user_id:
+        return api_error('Unauthorized', status=401)
+    if 'photo' not in request.files:
+        return api_error('No file provided', status=400)
+    file = request.files['photo']
+    if not file or not file.filename:
+        return api_error('No file selected', status=400)
+    try:
+        from services.file_upload_service import FileUploadService
+        from models.user_model import UserModel
+        url = FileUploadService().save_file(file, subfolder=f'avatars/{user_id}')
+        if not url:
+            return api_error('Upload failed — invalid file or too large', status=400)
+        UserModel().update(user_id, {'profile_picture': url})
+        return api_response(data={'profile_picture': url}, message='Profile picture updated', status=200)
+    except Exception as e:
+        return api_error(f'Upload failed: {e}', status=500)
 
 
 @auth_api_bp.get('/auth/me')

@@ -4,6 +4,7 @@ import 'theme/app_theme.dart';
 import 'services/api_service.dart';
 import 'screens/auth/login_screen.dart';
 import 'screens/auth/register_screen.dart';
+import 'screens/auth/forgot_password_screen.dart';
 import 'screens/buyer/home_screen.dart';
 import 'screens/buyer/shop_screen.dart';
 import 'screens/buyer/product_detail_screen.dart';
@@ -20,6 +21,12 @@ import 'screens/buyer/profile_screen.dart';
  import 'screens/seller/seller_store_profile_screen.dart';
  import 'screens/seller/seller_shipping_screen.dart';
  import 'screens/seller/seller_reviews_screen.dart';
+import 'screens/buyer/messages_screen.dart';
+import 'screens/buyer/notifications_screen.dart';
+import 'screens/buyer/wishlist_screen.dart';
+import 'screens/buyer/addresses_screen.dart';
+import 'screens/buyer/settings_screen.dart';
+import 'screens/buyer/order_summary_screen.dart';
 import 'screens/rider/rider_dashboard_screen.dart';
 import 'screens/admin/admin_dashboard_screen.dart';
 
@@ -42,8 +49,12 @@ class GrandeMarketplaceApp extends StatelessWidget {
         '/auth': (context) => const AuthWrapper(),
         '/login': (context) => const LoginScreen(),
         '/register': (context) => const RegisterScreen(),
+        '/forgot-password': (context) => const ForgotPasswordScreen(),
         '/home': (context) => const HomeScreen(),
-        '/shop': (context) => const ShopScreen(),
+        '/shop': (context) {
+          final category = ModalRoute.of(context)?.settings.arguments as String?;
+          return ShopScreen(initialCategory: category);
+        },
         '/product': (context) {
           final productId = ModalRoute.of(context)?.settings.arguments as String? ?? '';
           return ProductDetailScreen(productId: productId);
@@ -58,6 +69,16 @@ class GrandeMarketplaceApp extends StatelessWidget {
         },
         '/orders': (context) => const OrdersScreen(),
         '/profile': (context) => const ProfileScreen(),
+        '/messages': (context) => const MessagesScreen(),
+        '/notifications': (context) => const NotificationsScreen(),
+        '/wishlist': (context) => const WishlistScreen(),
+        '/addresses': (context) => const AddressesScreen(),
+        '/settings': (context) => const SettingsScreen(),
+        '/settings/password': (context) => const SettingsScreen(initialSection: 'password'),
+        '/order-summary': (context) {
+          final orderId = ModalRoute.of(context)?.settings.arguments as String? ?? '';
+          return OrderSummaryScreen(orderId: orderId);
+        },
         '/seller-dashboard': (context) => const SellerDashboardScreen(),
        '/seller/products': (context) => const SellerProductsScreen(),
        '/seller/products/add': (context) => const SellerAddProductScreen(),

@@ -183,6 +183,33 @@ def api_admin_order_status(order_id):
     updated = OrderModel().update_status_for_admin(order_id, status, rider_id)
     if not updated:
         return jsonify({'error': 'Order not found or invalid status'}), 404
+
+    buyer_id = updated.get('buyer_id')
+    if buyer_id:
+        try:
+            from models.notification_model import NotificationModel
+            notification_model = NotificationModel()
+            message = 'Your order status has been updated.'
+            if status == 'processing':
+                message = f'Your order #{order_id[:8].upper()} is being processed.'
+            elif status == 'ready_for_pickup':
+                message = f'Your order #{order_id[:8].upper()} is ready for pickup.'
+            elif status == 'in_transit':
+                message = f'Your order #{order_id[:8].upper()} is now out for delivery.'
+            elif status == 'delivered':
+                message = f'Your order #{order_id[:8].upper()} has been delivered.'
+
+            notification_model.create(
+                user_id=buyer_id,
+                notif_type='status_update',
+                title='Order Status Updated',
+                message=message,
+                action_url=f'/buyer/orders#{order_id}',
+                data_payload={'order_id': order_id, 'new_status': status}
+            )
+        except Exception as e:
+            print(f'Error creating admin order notification: {e}')
+
     return jsonify({'success': True, 'order': updated})
 
 @admin_bp.route('/api/orders/<order_id>/cancel', methods=['POST'])
@@ -343,11 +370,11 @@ def api_admin_commission():
 @admin_required
 def api_admin_sales_analytics():
     """Sales chart data (daily/weekly/monthly) from delivered orders."""
-    from datetime import datetime, timedelta
+    from datetime import datetime, timedelta, timezone
     period = request.args.get('period', 'daily')
     all_orders = OrderModel().get_all()
     delivered  = [o for o in all_orders if o.get('status') == 'delivered']
-    now = datetime.now()
+    now = datetime.now(timezone.utc)
     data = []
 
     if period == 'daily':
@@ -364,7 +391,7 @@ def api_admin_sales_analytics():
             for o in delivered:
                 try:
                     od = datetime.fromisoformat(o['created_at'].replace('Z', '+00:00'))
-                    if ws <= od.replace(tzinfo=None) <= we:
+                    if ws <= od <= we:
                         wk.append(o)
                 except Exception:
                     pass
@@ -535,6 +562,7 @@ def api_admin_earnings_detail():
 def api_admin_earnings_export():
     """Export earnings data as CSV or Excel."""
     from supabase import create_client
+    from datetime import datetime, timezone
     import os
     import io
     import csv
@@ -625,7 +653,7 @@ def api_admin_earnings_export():
             })
     
     # Generate file
-    now_str = datetime.now().strftime('%b_%Y')
+    now_str = datetime.now(timezone.utc).strftime('%b_%Y')
     
     if export_format == 'xlsx':
         try:
@@ -670,7 +698,7 @@ def api_admin_earnings_export():
                     ['Total Orders', len(set(row["Order ID"] for row in export_data))],
                     ['Total Items Sold', sum(row["Quantity"] for row in export_data)],
                     ['Commission Rate', f'{float(rates.get("commission_rate", 5))}%'],
-                    ['Export Date', datetime.now().strftime('%Y-%m-%d %H:%M:%S')],
+                    ['Export Date', datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M:%S')],
                 ]
                 summary_df = pd.DataFrame(summary_data)
                 summary_df.to_excel(writer, index=False, sheet_name='Summary')
@@ -706,7 +734,7 @@ def api_admin_earnings_export():
             f'Total Orders: {len(set(row["Order ID"] for row in export_data))}',
             f'Total Items Sold: {sum(row["Quantity"] for row in export_data)}',
             f'Commission Rate: {float(rates.get("commission_rate", 5))}%',
-            f'Export Date: {datetime.now().strftime("%Y-%m-%d %H:%M:%S")}',
+            f'Export Date: {datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")}',
         ]
         output.write('\n'.join(summary_lines))
         

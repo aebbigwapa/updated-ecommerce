@@ -11,18 +11,19 @@ class HeroCarousel extends StatefulWidget {
 class _HeroCarouselState extends State<HeroCarousel> {
   final PageController _pageController = PageController();
   int _currentPage = 0;
-  final List<HeroSlide> _slides = [
-    HeroSlide(
+
+  final List<_HeroSlide> _slides = [
+    _HeroSlide(
       title: 'New Collection',
       subtitle: 'Discover our latest arrivals',
       buttonText: 'Shop Now',
-      gradient: LinearGradient(
+      gradient: const LinearGradient(
         colors: [AppTheme.primaryLight, AppTheme.primaryDark],
         begin: Alignment.topLeft,
         end: Alignment.bottomRight,
       ),
     ),
-    HeroSlide(
+    _HeroSlide(
       title: 'Summer Sale',
       subtitle: 'Up to 50% off selected items',
       buttonText: 'Explore Deals',
@@ -32,7 +33,7 @@ class _HeroCarouselState extends State<HeroCarousel> {
         end: Alignment.bottomRight,
       ),
     ),
-    HeroSlide(
+    _HeroSlide(
       title: 'Premium Quality',
       subtitle: 'Fashion that defines you',
       buttonText: 'Learn More',
@@ -58,30 +59,16 @@ class _HeroCarouselState extends State<HeroCarousel> {
 
   void _startAutoPlay() {
     Future.delayed(const Duration(seconds: 5), () {
-      if (mounted) {
-        _nextPage();
-        _startAutoPlay();
-      }
+      if (!mounted) return;
+      _goTo((_currentPage + 1) % _slides.length);
+      _startAutoPlay();
     });
   }
 
-  void _nextPage() {
-    setState(() {
-      _currentPage = (_currentPage + 1) % _slides.length;
-    });
+  void _goTo(int page) {
+    setState(() => _currentPage = page);
     _pageController.animateToPage(
-      _currentPage,
-      duration: const Duration(milliseconds: 300),
-      curve: Curves.easeInOut,
-    );
-  }
-
-  void _previousPage() {
-    setState(() {
-      _currentPage = (_currentPage - 1 + _slides.length) % _slides.length;
-    });
-    _pageController.animateToPage(
-      _currentPage,
+      page,
       duration: const Duration(milliseconds: 300),
       curve: Curves.easeInOut,
     );
@@ -89,83 +76,66 @@ class _HeroCarouselState extends State<HeroCarousel> {
 
   @override
   Widget build(BuildContext context) {
+    // Responsive height: 40% of screen, clamped between 180–280px
+    final screenHeight = MediaQuery.of(context).size.height;
+    final carouselHeight = (screenHeight * 0.40).clamp(180.0, 280.0);
+
     return SizedBox(
-      height: 400,
+      height: carouselHeight,
       child: Stack(
         children: [
-          // Carousel
           PageView.builder(
             controller: _pageController,
-            onPageChanged: (index) {
-              setState(() => _currentPage = index);
-            },
+            onPageChanged: (i) => setState(() => _currentPage = i),
             itemCount: _slides.length,
-            itemBuilder: (context, index) {
-              return _buildSlide(_slides[index]);
-            },
+            itemBuilder: (_, i) => _buildSlide(_slides[i], carouselHeight),
           ),
-          
-          // Navigation Arrows
+
+          // Left arrow
           Positioned(
-            left: AppTheme.md,
+            left: AppTheme.sm,
             top: 0,
             bottom: 0,
             child: Center(
-              child: IconButton(
-                onPressed: _previousPage,
-                icon: const Icon(
-                  Icons.arrow_back_ios,
-                  color: AppTheme.white,
-                  size: 24,
-                ),
-                style: IconButton.styleFrom(
-                  backgroundColor: Colors.black.withValues(alpha: 0.3),
-                  shape: const CircleBorder(),
-                ),
+              child: _ArrowBtn(
+                icon: Icons.arrow_back_ios_new,
+                onTap: () => _goTo((_currentPage - 1 + _slides.length) % _slides.length),
               ),
             ),
           ),
-          
+
+          // Right arrow
           Positioned(
-            right: AppTheme.md,
+            right: AppTheme.sm,
             top: 0,
             bottom: 0,
             child: Center(
-              child: IconButton(
-                onPressed: _nextPage,
-                icon: const Icon(
-                  Icons.arrow_forward_ios,
-                  color: AppTheme.white,
-                  size: 24,
-                ),
-                style: IconButton.styleFrom(
-                  backgroundColor: Colors.black.withValues(alpha: 0.3),
-                  shape: const CircleBorder(),
-                ),
+              child: _ArrowBtn(
+                icon: Icons.arrow_forward_ios,
+                onTap: () => _goTo((_currentPage + 1) % _slides.length),
               ),
             ),
           ),
-          
-          // Page Indicators
+
+          // Dot indicators
           Positioned(
-            bottom: AppTheme.md,
+            bottom: AppTheme.sm,
             left: 0,
             right: 0,
-            child: Center(
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: List.generate(
-                  _slides.length,
-                  (index) => Container(
-                    margin: const EdgeInsets.symmetric(horizontal: 4),
-                    width: _currentPage == index ? 12 : 8,
-                    height: 8,
-                    decoration: BoxDecoration(
-                      color: _currentPage == index 
-                          ? AppTheme.white 
-                          : AppTheme.white.withValues(alpha: 0.5),
-                      borderRadius: BorderRadius.circular(4),
-                    ),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: List.generate(
+                _slides.length,
+                (i) => AnimatedContainer(
+                  duration: const Duration(milliseconds: 200),
+                  margin: const EdgeInsets.symmetric(horizontal: 3),
+                  width: _currentPage == i ? 14 : 7,
+                  height: 7,
+                  decoration: BoxDecoration(
+                    color: _currentPage == i
+                        ? AppTheme.white
+                        : AppTheme.white.withValues(alpha: 0.5),
+                    borderRadius: BorderRadius.circular(4),
                   ),
                 ),
               ),
@@ -176,77 +146,101 @@ class _HeroCarouselState extends State<HeroCarousel> {
     );
   }
 
-  Widget _buildSlide(HeroSlide slide) {
+  Widget _buildSlide(_HeroSlide slide, double height) {
+    // Responsive font sizes based on carousel height
+    final titleSize = (height * 0.13).clamp(20.0, 34.0);
+    final subtitleSize = (height * 0.065).clamp(12.0, 16.0);
+
     return Container(
-      decoration: BoxDecoration(
-        gradient: slide.gradient,
+      decoration: BoxDecoration(gradient: slide.gradient),
+      padding: const EdgeInsets.symmetric(
+        horizontal: AppTheme.lg,
+        vertical: AppTheme.md,
       ),
-      child: Padding(
-        padding: const EdgeInsets.all(AppTheme.xl),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              slide.title,
-              style: const TextStyle(
-                fontFamily: AppTheme.fontDisplay,
-                fontSize: 48,
-                fontWeight: FontWeight.w700,
-                color: AppTheme.white,
-                height: 1.2,
-              ),
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            slide.title,
+            style: TextStyle(
+              fontFamily: AppTheme.fontDisplay,
+              fontSize: titleSize,
+              fontWeight: FontWeight.w700,
+              color: AppTheme.white,
+              height: 1.2,
             ),
-            const SizedBox(height: AppTheme.md),
-            Text(
-              slide.subtitle,
+          ),
+          const SizedBox(height: 6),
+          Text(
+            slide.subtitle,
+            style: TextStyle(
+              fontFamily: AppTheme.fontBody,
+              fontSize: subtitleSize,
+              color: AppTheme.white,
+              height: 1.4,
+            ),
+          ),
+          const SizedBox(height: AppTheme.md),
+          ElevatedButton(
+            onPressed: () => Navigator.pushNamed(context, '/shop'),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppTheme.white,
+              foregroundColor: AppTheme.primaryLight,
+              padding: const EdgeInsets.symmetric(
+                horizontal: AppTheme.lg,
+                vertical: AppTheme.sm,
+              ),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(AppTheme.radiusMd),
+              ),
+              minimumSize: Size.zero,
+              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+            ),
+            child: Text(
+              slide.buttonText,
               style: const TextStyle(
                 fontFamily: AppTheme.fontBody,
-                fontSize: 18,
-                fontWeight: FontWeight.w400,
-                color: AppTheme.white,
-                height: 1.4,
+                fontSize: 14,
+                fontWeight: FontWeight.w600,
               ),
             ),
-            const SizedBox(height: AppTheme.xl),
-            ElevatedButton(
-              onPressed: () {
-                Navigator.pushNamed(context, '/shop');
-              },
-              style: ElevatedButton.styleFrom(
-                backgroundColor: AppTheme.white,
-                foregroundColor: AppTheme.primaryLight,
-                padding: const EdgeInsets.symmetric(
-                  horizontal: AppTheme.xl,
-                  vertical: AppTheme.md,
-                ),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(AppTheme.radiusMd),
-                ),
-              ),
-              child: Text(
-                slide.buttonText,
-                style: const TextStyle(
-                  fontFamily: AppTheme.fontBody,
-                  fontSize: 16,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-            ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }
 }
 
-class HeroSlide {
+class _ArrowBtn extends StatelessWidget {
+  final IconData icon;
+  final VoidCallback onTap;
+  const _ArrowBtn({required this.icon, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        width: 32,
+        height: 32,
+        decoration: BoxDecoration(
+          color: Colors.black.withValues(alpha: 0.25),
+          shape: BoxShape.circle,
+        ),
+        child: Icon(icon, color: AppTheme.white, size: 16),
+      ),
+    );
+  }
+}
+
+class _HeroSlide {
   final String title;
   final String subtitle;
   final String buttonText;
   final Gradient gradient;
 
-  HeroSlide({
+  _HeroSlide({
     required this.title,
     required this.subtitle,
     required this.buttonText,

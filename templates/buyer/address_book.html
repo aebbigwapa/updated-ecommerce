@@ -226,20 +226,28 @@ async function loadAddressBook() {
             </div>`;
         return;
     }
-    container.innerHTML = data.map(a => `
+    container.innerHTML = data.map(a => {
+        const id = JSON.stringify(a.id || '');
+        const label = JSON.stringify(a.label || '');
+        const street = JSON.stringify(a.street || '');
+        const barangay = JSON.stringify(a.barangay || '');
+        const city = JSON.stringify(a.city || '');
+        const region = JSON.stringify(a.region || '');
+        const zip = JSON.stringify(a.zip_code || '');
+        return `
         <div class="address-card mb-3">
             ${a.is_default ? '<span class="default-badge">Default</span>' : ''}
             <div style="font-size:14px;font-weight:600;margin-bottom:4px">${a.label || 'Home'}</div>
             <div style="font-size:13px;color:var(--gray)">${[a.street,a.barangay,a.city,a.region,a.zip_code].filter(Boolean).join(', ')}</div>
             ${a.latitude ? `<div style="font-size:12px;color:var(--gray);margin-top:4px">📍 ${Number(a.latitude).toFixed(5)}, ${Number(a.longitude).toFixed(5)}</div>` : ''}
             <div class="d-flex gap-2 mt-3">
-                <button class="btn btn-sm btn-outline-secondary" onclick="openEditModal('${a.id}','${(a.label||'').replace(/'/g,"\\'")}',' +
-                    `'${(a.street||'').replace(/'/g,"\\'")}','${(a.barangay||'').replace(/'/g,"\\'")}','${(a.city||'').replace(/'/g,"\\'")}','${(a.region||'').replace(/'/g,"\\'")}','${(a.zip_code||'').replace(/'/g,"\\'")}')">Edit</button>
-                <button class="btn btn-sm btn-outline-danger" onclick="deleteAddress('${a.id}')">Delete</button>
-                ${!a.is_default ? `<button class="btn btn-sm btn-outline-success" onclick="setDefault('${a.id}')">Set Default</button>` : ''}
+                <button class="btn btn-sm btn-outline-secondary" onclick='openEditModal(${id},${label},${street},${barangay},${city},${region},${zip})'>Edit</button>
+                <button class="btn btn-sm btn-outline-danger" onclick='deleteAddress(${JSON.stringify(a.id || '')})'>Delete</button>
+                ${!a.is_default ? `<button class="btn btn-sm btn-outline-success" onclick='setDefault(${JSON.stringify(a.id || '')})'>Set Default</button>` : ''}
             </div>
         </div>
-    `).join('');
+    `;
+    }).join('');
 }
 
 async function deleteAddress(id) {

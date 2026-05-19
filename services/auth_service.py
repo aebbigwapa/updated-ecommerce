@@ -29,6 +29,15 @@ class AuthService:
         password = str(password) if password else ''
         
         user = self.user_model.get_by_email(email)
+        if not user:
+            print(f'Login debug: email={email!r} user_found=False')
+        else:
+            stored_pw = user.get('password', '')
+            print(
+                f'Login debug: email={email!r} user_found=True '
+                f'password_prefix={stored_pw[:20]!r} '
+                f'password_format_ok={stored_pw.startswith("pbkdf2_sha256$")}'
+            )
         
         # Handle case where user might be a tuple instead of dict
         if user and isinstance(user, (list, tuple)):
@@ -54,7 +63,9 @@ class AuthService:
             return {'success': False, 'error': 'Invalid email or password (attempts remaining: %d)' % remaining}
 
         from security import verify_password, hash_password
-        if not verify_password(password, user.get('password', '')):
+        verify_ok = verify_password(password, user.get('password', ''))
+        print(f'Login debug: email={email!r} verify_password={verify_ok}')
+        if not verify_ok:
             remaining, delay = record_failed_login(email)
             log_failed_login(self.supabase, email, ip, ua)
             if remaining == 0:

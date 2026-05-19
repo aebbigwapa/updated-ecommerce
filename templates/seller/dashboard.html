@@ -151,7 +151,7 @@
         <li><a href="/seller/store"><span class="icon">🏬</span> Store Profile</a></li>
         <li><a href="/seller/reviews"><span class="icon">⭐</span> Reviews</a></li>
         <li class="menu-group">SUPPORT</li>
-        <li><a href="/messages/"><span class="icon">💬</span> Messages</a></li>
+        <li><a href="/messages/"><span class="icon">💬</span> Messages <span id="messageBadge" class="notification-badge" style="display:none;background:#FF2BAC;color:#fff;font-size:10px;font-weight:700;min-width:18px;height:18px;border-radius:9px;padding:0 4px;display:inline-flex;align-items:center;justify-content:center;margin-left:6px">0</span></a></li>
     </ul>
     <div class="sidebar-footer">
         <div class="sidebar-user">🏪 {{ session.user.name }}</div>
@@ -246,6 +246,54 @@
 
     </div>
 </div>
+
+<!-- Admin Support Chat Widget -->
+<div class="admin-support-widget" style="position:fixed;bottom:20px;right:20px;z-index:1000">
+    <button onclick="startAdminChat()" 
+        style="
+            width:56px;height:56px;border-radius:50%;
+            background:linear-gradient(135deg,#FF2BAC,#FF6BCE);
+            border:none;color:#fff;font-size:24px;
+            box-shadow:0 4px 12px rgba(255,43,172,.3);
+            cursor:pointer;transition:transform .2s;
+            display:flex;align-items:center;justify-content:center;
+        " 
+        onmouseover="this.style.transform='scale(1.1)'" 
+        onmouseout="this.style.transform='scale(1)'"
+        title="Chat with Admin Support">
+        💬
+    </button>
+</div>
+
+<script>
+async function startAdminChat() {
+    try {
+        const adminRes = await fetch('/messages/api/admin-user-id').then(r => r.json());
+        if (!adminRes.admin_id) {
+            alert('Admin support is currently unavailable. Please try again later.');
+            return;
+        }
+        
+        const res = await fetch('/messages/api/conversations/start', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRF-Token': document.querySelector('meta[name="csrf-token"]')?.content || ''
+            },
+            body: JSON.stringify({ user_id: adminRes.admin_id })
+        }).then(r => r.json());
+        
+        if (res && res.id) {
+            window.location.href = `/messages/?conv=${res.id}`;
+        } else {
+            alert('Failed to start chat with admin. Please try again.');
+        }
+    } catch (e) {
+        console.error('Failed to start admin chat:', e);
+        alert('Network error. Please try again.');
+    }
+}
+</script>
 
 <div class="toast" id="toast"></div>
 

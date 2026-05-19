@@ -1,5 +1,8 @@
 import 'dart:async';
+import 'dart:convert';
 import 'package:flutter/material.dart';
+import 'package:http/http.dart' as http;
+import 'package:shared_preferences/shared_preferences.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/grande_navbar.dart';
 import '../../widgets/hero_carousel.dart';
@@ -43,13 +46,9 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Future<void> _loadUserData() async {
-    // Load user data from API or local storage
-    final user = await ApiService.getCurrentUser();
-    if (user != null && mounted) {
-      setState(() {
-        userName = user['first_name'] ?? 'User';
-      });
-    }
+    final prefs = await SharedPreferences.getInstance();
+    final firstName = prefs.getString('user_first_name') ?? '';
+    if (firstName.isNotEmpty && mounted) setState(() => userName = firstName);
   }
 
   Future<void> _loadProducts() async {
@@ -93,6 +92,7 @@ class _HomeScreenState extends State<HomeScreen> {
         userName: userName,
       ),
       bottomNavigationBar: const GrandeBottomNav(currentIndex: 0),
+      floatingActionButton: _AdminChatFab(),
       body: SingleChildScrollView(
         child: Column(
           children: [
@@ -341,5 +341,46 @@ class _HomeScreenState extends State<HomeScreen> {
         ],
       ),
     );
+  }
+}
+
+// ── Admin Support Chat FAB — matches web dashboard floating chat button ───────
+class _AdminChatFab extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) {
+    return FloatingActionButton(
+      onPressed: () => _startAdminChat(context),
+      backgroundColor: AppTheme.primaryLight,
+      tooltip: 'Chat with Admin Support',
+      child: const Icon(Icons.chat_bubble_outline, color: Colors.white),
+    );
+  }
+
+  Future<void> _startAdminChat(BuildContext context) async {
+    final token = await ApiService.getAuthToken();
+    if (token == null) {
+      Navigator.pushNamed(context, '/login');
+      return;
+    }
+    try {
+      final adminRes = await ApiService.get('/messages/api/admin-user-id', token: token);
+      final adminId = adminRes['admin_id']?.toString();
+      if (adminId == null || adminId.isEmpty) {
+        if (context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Admin support is currently unavailable.')),
+          );
+        }
+        return;
+      }
+      final res = await http.post(
+        Uri.parse('${ApiService.flaskBaseUrl}/messages/api/flutter/conversations/start'),
+        headers: {'Authorization': 'Bearer $token', 'Content-Type': 'application/json'},
+        body: jsonEncode({'other_id': adminId}),
+      ).timeout(const Duration(seconds: 10));
+      if (context.mounted) Navigator.pushNamed(context, '/messages');
+    } catch (_) {
+      if (context.mounted) Navigator.pushNamed(context, '/messages');
+    }
   }
 }

@@ -40,7 +40,7 @@ function buildProductCard(p) {
     const imgEl    = imgSrc
         ? `<img src="${imgSrc}" alt="${p.name}" style="width:100%;height:100%;object-fit:cover">`
         : `<span style="font-size:48px">👗</span>`;
-    const seller   = p.seller ? `${p.seller.first_name || ''} ${p.seller.last_name || ''}`.trim() : '';
+    const seller   = p.seller_name || (p.seller ? `${p.seller.first_name || ''} ${p.seller.last_name || ''}`.trim() : '');
     const stock    = p.stock ?? p.total_stock ?? 0;
     const variants = (p.product_variants || []);
     const colorDots = variants.slice(0, 5).map(v => {
@@ -51,7 +51,7 @@ function buildProductCard(p) {
     const card = document.createElement('div');
     card.className = 'product-card';
     card.style.cursor = 'pointer';
-    card.onclick = () => window.location.href = `/buyer/market`;
+    card.onclick = () => window.location.href = `/buyer/product?id=${p.id}`;
     card.innerHTML = `
         <div class="product-image-wrapper">${imgEl}</div>
         <h3 class="product-name">${p.name}</h3>
@@ -61,7 +61,7 @@ function buildProductCard(p) {
         </div>
         <div style="font-size:11px;color:#999;margin-bottom:8px">${stock > 0 ? `${stock} in stock` : '<span style="color:#e74c3c">Out of stock</span>'}</div>
         ${colorDots ? `<div style="margin-bottom:8px">${colorDots}</div>` : ''}
-        <a href="/buyer/market" class="quick-add-btn" style="text-align:center;display:block;text-decoration:none">View Product</a>`;
+        <a href="/buyer/product?id=${p.id}" class="quick-add-btn" style="text-align:center;display:block;text-decoration:none">View Product</a>`;
     return card;
 }
 
@@ -85,7 +85,7 @@ function renderGrid(gridId, products) {
 // ── Fetch & display products ──────────────────────────────────
 async function loadHomeProducts() {
     try {
-        const res  = await fetch('/api/products');
+        const res  = await fetch('/api/products?limit=12');
         const json = await res.json();
 
         // Unwrap envelope: {data:{products:[...]}} or plain array
@@ -116,10 +116,12 @@ async function loadCartCount() {
     try {
         const res  = await fetch('/buyer/api/cart');
         if (!res.ok) return;
-        const data = await res.json();
+        const json = await res.json();
+        // Unwrap {success, data:{items, item_count}} envelope
+        const itemCount = json?.data?.item_count ?? json?.item_count ?? 0;
         const badge = document.getElementById('cartBadge');
-        if (badge && Array.isArray(data) && data.length > 0) {
-            badge.textContent = data.length;
+        if (badge && itemCount > 0) {
+            badge.textContent = itemCount;
             badge.style.display = 'flex';
         }
     } catch { /* not logged in */ }

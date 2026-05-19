@@ -74,27 +74,35 @@ class MessageModel:
         return convs
 
     def get_all_conversations(self):
-        """Admin: all conversations with both participant details."""
+        """Admin: all conversations with both participant details + other_user for Flutter."""
         result = self.supabase.table('conversations').select(
             '*'
         ).order('updated_at', desc=True).execute()
         convs = result.data or []
         if not convs:
             return []
-        # Fetch all participants (both p1 and p2)
         all_user_ids = []
         for c in convs:
             all_user_ids.extend([c['participant_1'], c['participant_2']])
         all_user_ids = list(set(all_user_ids))
         users_res = self.supabase.table('users').select(
-            'id, first_name, last_name, role, email'
+            'id, first_name, last_name, role, email, profile_picture'
         ).in_('id', all_user_ids).execute()
         users_map = {u['id']: u for u in (users_res.data or [])}
-        # Attach participant details
+        # Enrich store names for sellers
+        seller_ids = [uid for uid, u in users_map.items() if u.get('role') == 'seller']
+        store_map = {}
+        if seller_ids:
+            apps = self.supabase.table('applications').select('user_id, store_name') \
+                .in_('user_id', seller_ids).eq('role', 'seller').execute()
+            store_map = {a['user_id']: a.get('store_name', '') for a in (apps.data or [])}
+        for uid in seller_ids:
+            if uid in users_map:
+                users_map[uid]['store_name'] = store_map.get(uid, '')
         for c in convs:
             c['participant_1_data'] = users_map.get(c['participant_1'])
             c['participant_2_data'] = users_map.get(c['participant_2'])
-        # Attach unread count per conversation
+        # Attach unread count
         for c in convs:
             unread = self.supabase.table('messages').select('id', count='exact') \
                 .eq('conversation_id', c['id']).eq('is_read', False).execute()
@@ -186,6 +194,30 @@ class MessageModel:
             msg['sender'] = users_map.get(msg['sender_id'])
             msg['receiver'] = users_map.get(msg['receiver_id'])
         return messages
+
+    def ensure_order_conversations(self, order_id, status,
+                                    buyer_id, seller_id, rider_id=None):
+        """Create the correct conversations for an order based on its status.
+
+        Rules:
+          processing        -> buyer  <-> seller  (seller confirmed)
+          ready_for_pickup  -> seller <-> rider   (parcel prepared, rider accepted)
+          in_transit        -> rider  <-> buyer   (rider picked up parcel)
+        """
+        created = []
+        if status == 'processing' and buyer_id and seller_id:
+            conv = self.get_or_create_conversation(buyer_id, seller_id, order_id)
+            if conv:
+                created.append(conv)
+        elif status == 'ready_for_pickup' and seller_id and rider_id:
+            conv = self.get_or_create_conversation(seller_id, rider_id, order_id)
+            if conv:
+                created.append(conv)
+        elif status == 'in_transit' and rider_id and buyer_id:
+            conv = self.get_or_create_conversation(rider_id, buyer_id, order_id)
+            if conv:
+                created.append(conv)
+        return created
 
     def auto_message_sent(self, conversation_id, sender_id):
         """Check if sender already sent the auto welcome message in this conversation."""

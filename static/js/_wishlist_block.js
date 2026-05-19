@@ -1,4 +1,12 @@
 // -- Wishlist page ------------------------------------------
+function isUserLoggedIn() {
+    return document.querySelector('[data-user-id]') !== null;
+}
+
+function loginRedirectUrl() {
+    return '/login?return_to=' + encodeURIComponent(window.location.pathname + window.location.search);
+}
+
 function buildWishlistCard(p) {
     var sellerObj  = p.seller || {};
     var seller     = ((sellerObj.first_name || '') + ' ' + (sellerObj.last_name || '')).trim() || (p.seller_name || '');
@@ -13,7 +21,9 @@ function buildWishlistCard(p) {
     var stockHtml  = '<div class="wc-stock ' + (outOfStock ? 'out-stock' : 'in-stock') + '">' + (outOfStock ? 'Out of stock' : stock + ' in stock') + '</div>';
     var cartBtn    = outOfStock
         ? '<button class="wc-btn-cart" disabled>Out of Stock</button>'
-        : '<button class="wc-btn-cart" onclick="addToCart({id:\'' + p.id + '\',name:\'' + p.name.replace(/'/g, '') + '\'})">&#128722; Add to Cart</button>';
+        : (isUserLoggedIn()
+            ? '<button class="wc-btn-cart" onclick="addToCart({id:\'' + p.id + '\',name:\'' + p.name.replace(/'/g, '') + '\'})">&#128722; Add to Cart</button>'
+            : '<button class="wc-btn-cart" onclick="window.location.href=\'' + loginRedirectUrl() + '\'">&#128722; Add to Cart</button>');
     var removeBtn  = '<button class="wc-btn-remove" onclick="removeFromWishlist(\'' + p.id + '\')">&#10084;&#65039; Remove</button>';
     return '<div class="wishlist-card" id="wc-' + p.id + '">'
         + '<div class="wc-image" onclick="window.location=\'/buyer/product?id=' + p.id + '\'">'

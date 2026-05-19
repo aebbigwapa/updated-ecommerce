@@ -17,9 +17,18 @@ products_api_bp = Blueprint('products_api', __name__)
 def list_products():
     try:
         from models.product_model import ProductModel
+        limit = int(request.args.get('limit', 12))
+        offset = int(request.args.get('offset', 0))
         category = (request.args.get('category') or '').strip() or None
+        
         products = ProductModel().get_all_active(category=category)
-        items = [serialize_product(p) for p in (products or [])]
+        
+        # Slice for pagination
+        paginated = products[offset:offset + limit]
+        
+        # Use full serializer from api_helpers
+        items = [serialize_product(p) for p in paginated]
+        
         return api_response(
             data={"products": items, "count": len(items)},
             message="OK",

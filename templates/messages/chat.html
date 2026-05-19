@@ -265,6 +265,23 @@ document.addEventListener('DOMContentLoaded', () => {
 async function loadConversations() {
     const res = await fetch('/messages/api/conversations').then(r => r.json()).catch(() => []);
     allConversations = Array.isArray(res) ? res : [];
+    
+    // Fetch store names for sellers
+    for (const conv of allConversations) {
+        const other = conv.other_user || conv.other || {};
+        if (other.role === 'seller') {
+            // Fetch seller's store name from applications table
+            try {
+                const storeRes = await fetch(`/api/seller/${other.id}/store-name`).then(r => r.json()).catch(() => null);
+                if (storeRes && storeRes.store_name) {
+                    other.store_name = storeRes.store_name;
+                }
+            } catch (e) {
+                console.error('Failed to fetch store name:', e);
+            }
+        }
+    }
+    
     renderConversations(allConversations);
 }
 
@@ -275,20 +292,26 @@ function renderConversations(convs) {
         return;
     }
     list.innerHTML = convs.map(c => {
-        const other = c.other || c.p1 || {};
-        const name = `${other.first_name || ''} ${other.last_name || ''}`.trim() || 'Unknown';
-        const initial = name[0]?.toUpperCase() || '?';
+        const other = c.other_user || c.other || {};
+        let displayName = `${other.first_name || ''} ${other.last_name || ''}`.trim() || 'Unknown';
+        
+        // Show store name for sellers, full name for buyers
+        if (other.role === 'seller' && other.store_name) {
+            displayName = other.store_name;
+        }
+        
+        const initial = displayName[0]?.toUpperCase() || '?';
         const role = other.role || '';
         const unread = c.unread_count || 0;
         const time = c.updated_at ? timeAgo(c.updated_at) : '';
         return `
         <div class="conv-item ${c.id === activeConvId ? 'active' : ''}" onclick="openConversation('${c.id}')">
             <div class="conv-avatar">
-                ${other.profile_picture ? `<img src="${other.profile_picture}" alt="${name}">` : initial}
+                ${other.profile_picture ? `<img src="${other.profile_picture}" alt="${displayName}">` : initial}
                 ${unread > 0 ? '<div class="conv-unread-dot"></div>' : ''}
             </div>
             <div class="conv-info">
-                <div class="conv-name">${name} <span class="role-badge role-${role}">${role}</span></div>
+                <div class="conv-name">${displayName} <span class="role-badge role-${role}">${role}</span></div>
                 <div class="conv-preview">${c.last_message || 'No messages yet'}</div>
             </div>
             <div class="conv-meta">
@@ -322,12 +345,17 @@ async function openConversation(convId) {
 
     // Find conversation data
     const conv = allConversations.find(c => c.id === convId);
-    const other = conv ? (conv.other || conv.p1 || {}) : {};
-    const name = `${other.first_name || ''} ${other.last_name || ''}`.trim() || 'User';
+    const other = conv ? (conv.other_user || conv.other || {}) : {};
+    
+    // Determine display name based on role
+    let displayName = `${other.first_name || ''} ${other.last_name || ''}`.trim() || 'User';
+    if (other.role === 'seller' && other.store_name) {
+        displayName = other.store_name;
+    }
 
     // Update topbar
-    document.getElementById('chatTopAvatar').textContent = name[0]?.toUpperCase() || '?';
-    document.getElementById('chatTopName').textContent = name;
+    document.getElementById('chatTopAvatar').textContent = displayName[0]?.toUpperCase() || '?';
+    document.getElementById('chatTopName').textContent = displayName;
     document.getElementById('chatTopRole').innerHTML = `<span class="role-badge role-${other.role || ''}">${other.role || ''}</span>`;
 
     // Show chat area

@@ -26,21 +26,54 @@ function showToast(msg, type = false) {
 }
 
 // ── Cart badge ────────────────────────────────────────────────
+// ── Cart badge ────────────────────────────────────────────────
+function _loginRedirectUrl() {
+    return '/login?return_to=' + encodeURIComponent(window.location.pathname + window.location.search);
+}
+
+function _cartButtonOnClick(productId) {
+    if (document.querySelector('[data-user-id]') !== null) {
+        _cartFromRegistry(productId);
+    } else {
+        window.location.href = _loginRedirectUrl();
+    }
+}
+
+function redirectToLogin() {
+    window.location.href = _loginRedirectUrl();
+}
+
 async function updateCartBadge() {
-    const raw = await API.buyer.getCart().catch(() => null);
-    let items = [];
-    if (Array.isArray(raw))                                   items = raw;
-    else if (raw && Array.isArray(raw.items))                 items = raw.items;
-    else if (raw && raw.data && Array.isArray(raw.data.items)) items = raw.data.items;
-    const total = items.reduce((sum, i) => sum + Number(i.quantity || 0), 0);
+    const isLoggedIn = document.querySelector('[data-user-id]') !== null;
+    let total = 0;
+    
+    if (isLoggedIn) {
+        // Logged-in user - fetch from database
+        const raw = await API.buyer.getCart().catch(() => null);
+        let items = [];
+        if (Array.isArray(raw))                                   items = raw;
+        else if (raw && Array.isArray(raw.items))                 items = raw.items;
+        else if (raw && raw.data && Array.isArray(raw.data.items)) items = raw.data.items;
+        total = items.reduce((sum, i) => sum + Number(i.quantity || 0), 0);
+    }
+    
     document.querySelectorAll('.cart-count').forEach(el => {
         el.textContent = total;
         el.style.display = total > 0 ? 'flex' : 'none';
     });
 }
 
-// ── Cart (Supabase-backed) ────────────────────────────────────
+// ── Cart (Supabase-backed for logged-in users, localStorage for guests) ────────────────────────────────────
 async function addToCart(product, quantity = 1, variantId = null) {
+    // Check if user is logged in
+    const isLoggedIn = document.querySelector('[data-user-id]') !== null;
+    
+    if (!isLoggedIn) {
+        redirectToLogin();
+        return;
+    }
+    
+    // Logged-in user - use database cart
     // Auto-pick first available variant if none specified
     if (!variantId && product.variants && product.variants.length > 0) {
         const first = product.variants.find(v => v.stock > 0) || product.variants[0];
@@ -136,6 +169,17 @@ function renderStars(rating) {
     return '★'.repeat(full) + '☆'.repeat(empty);
 }
 
+// ── Product registry (avoids inline JSON in onclick attributes) ──────────────
+const _productRegistry = {};
+function _regProduct(p) {
+    _productRegistry[p.id] = p;
+    return p.id;
+}
+function _cartFromRegistry(id) {
+    const p = _productRegistry[id];
+    if (p) addToCart(p);
+}
+
 // ── Market page ───────────────────────────────────────────────
 async function loadMarket(params = {}) {
     const grid = document.getElementById('productGrid');
@@ -192,6 +236,10 @@ function buildMarketCard(p) {
     const seller     = p.seller ? `${p.seller.first_name || ''} ${p.seller.last_name || ''}`.trim() : '';
     const stock      = p.stock ?? p.total_stock ?? 0;
     const wishlisted = isWishlisted(p.id);
+    const isLoggedIn = document.querySelector('[data-user-id]') !== null;
+    const loginLabel = 'Add to Cart';
+    const action = isLoggedIn ? `_cartFromRegistry('${p.id}')` : `window.location.href='${_loginRedirectUrl()}'`;
+    _regProduct(p);
 
     const card = document.createElement('div');
     card.className = 'product-card';
@@ -200,7 +248,7 @@ function buildMarketCard(p) {
         <div class="product-image-wrapper" onclick="window.location='/buyer/product?id=${p.id}'">
             ${imgEl}
             <button class="product-wishlist ${wishlisted ? 'active' : ''}"
-                onclick="event.stopPropagation(); handleWishlist(this, ${JSON.stringify(p).replace(/"/g, '&quot;')})"
+                onclick="event.stopPropagation(); handleWishlistById('${p.id}', this)"
                 title="Wishlist">❤️</button>
         </div>
         <h3 class="product-name" onclick="window.location='/buyer/product?id=${p.id}'" style="cursor:pointer">${p.name}</h3>
@@ -212,9 +260,9 @@ function buildMarketCard(p) {
             ${stock > 0 ? `${stock} in stock` : '<span style="color:#e74c3c">Out of stock</span>'}
         </div>
         <button class="quick-add-btn"
-            onclick="addToCart({id:'${p.id}',name:'${p.name}'})"
+            onclick="${action}"
             ${stock <= 0 ? 'disabled style="opacity:0.5;cursor:not-allowed"' : ''}>
-            ${stock > 0 ? 'Add to Cart' : 'Out of Stock'}
+            ${stock > 0 ? loginLabel : 'Out of Stock'}
         </button>`;
     return card;
 }
@@ -222,6 +270,11 @@ function buildMarketCard(p) {
 function handleWishlist(btn, product) {
     const added = toggleWishlist(product);
     btn.classList.toggle('active', added);
+}
+
+function handleWishlistById(id, btn) {
+    const p = _productRegistry[id];
+    if (p) handleWishlist(btn, p);
 }
 
 // ── Product card rendering ────────────────────────────────────
@@ -234,13 +287,17 @@ function renderProductCard(p) {
     const seller   = p.seller ? `${p.seller.first_name || ''} ${p.seller.last_name || ''}`.trim() : '';
     const stock    = p.stock ?? p.total_stock ?? 0;
     const wishlisted = isWishlisted(p.id);
+    const isLoggedIn = document.querySelector('[data-user-id]') !== null;
+    const loginLabel = 'Add to Cart';
+    const action = isLoggedIn ? `_cartFromRegistry('${p.id}')` : `window.location.href='${_loginRedirectUrl()}'`;
+    _regProduct(p);
 
     return `
         <div class="col-md-4 col-sm-6 mb-4">
                 <div class="product-image-wrapper" onclick="window.location='/buyer/product?id=${p.id}'">
                     ${imgEl}
                     <button class="product-wishlist ${wishlisted ? 'active' : ''}"
-                        onclick="event.stopPropagation(); handleWishlist(this, ${JSON.stringify(p).replace(/"/g, '&quot;')})"
+                        onclick="event.stopPropagation(); handleWishlistById('${p.id}', this)"
                         title="Wishlist">❤️</button>
                 </div>
                 <h3 class="product-name" onclick="window.location='/buyer/product?id=${p.id}'" style="cursor:pointer">${p.name}</h3>
@@ -252,9 +309,9 @@ function renderProductCard(p) {
                     ${stock > 0 ? `${stock} in stock` : '<span style="color:#e74c3c">Out of stock</span>'}
                 </div>
                 <button class="quick-add-btn"
-                    onclick="addToCart({id:'${p.id}',name:'${p.name}'})"
+                    onclick="${action}"
                     ${stock <= 0 ? 'disabled style="opacity:0.5;cursor:not-allowed"' : ''}>
-                    ${stock > 0 ? 'Add to Cart' : 'Out of Stock'}
+                    ${stock > 0 ? loginLabel : 'Out of Stock'}
                 </button>
             </div>
         </div>`;
@@ -636,6 +693,7 @@ function buildWishlistCard(p) {
     const imgSrc = p.image || '';
     const seller = p.seller ? `${p.seller.first_name || ''} ${p.seller.last_name || ''}`.trim() : '';
     const stock = p.total_stock ?? p.stock ?? 0;
+    _regProduct(p);
 
     const card = document.createElement('div');
     card.className = 'wishlist-card';
@@ -643,11 +701,14 @@ function buildWishlistCard(p) {
     const imgEl = imgSrc
         ? `<img src="${imgSrc}" alt="${p.name}" onerror="this.parentElement.innerHTML='<span class=\\'wc-image-placeholder\\'>🛍️</span>'">`
         : `<span class="wc-image-placeholder">🛍️</span>`;
+    const isLoggedIn = document.querySelector('[data-user-id]') !== null;
+    const loginLabel = 'Add to Cart';
+    const cartAction = isLoggedIn ? `_cartFromRegistry('${p.id}')` : `window.location.href='${_loginRedirectUrl()}'`;
 
     card.innerHTML = `
         <div class="wc-image" onclick="window.location='/buyer/product?id=${p.id}'">
             ${imgEl}
-            <button class="wc-remove" onclick="event.stopPropagation(); removeWishlistItem(${JSON.stringify(p).replace(/"/g, '"')})" title="Remove from wishlist">✕</button>
+            <button class="wc-remove" onclick="event.stopPropagation(); _removeWishlistById('${p.id}')" title="Remove from wishlist">✕</button>
         </div>
         <div class="wc-body">
             <h3 class="wc-name" onclick="window.location='/buyer/product?id=${p.id}'">${p.name}</h3>
@@ -657,15 +718,20 @@ function buildWishlistCard(p) {
                 ${stock > 0 ? `${stock} in stock` : 'Out of stock'}
             </div>
             <div class="wc-actions">
-                <button class="wc-btn-cart" onclick="addToCart({id:'${p.id}',name:'${p.name}'})" ${stock <= 0 ? 'disabled' : ''}>
-                    ${stock > 0 ? 'Add to Cart' : 'Out of Stock'}
+                <button class="wc-btn-cart" onclick="${cartAction}" ${stock <= 0 ? 'disabled' : ''}>
+                    ${stock > 0 ? loginLabel : 'Out of Stock'}
                 </button>
-                <button class="wc-btn-remove" onclick="removeWishlistItem(${JSON.stringify(p).replace(/"/g, '"')})">
+                <button class="wc-btn-remove" onclick="_removeWishlistById('${p.id}')">
                     ❤️ Remove
                 </button>
             </div>
         </div>`;
     return card;
+}
+
+function _removeWishlistById(id) {
+    const p = _productRegistry[id];
+    if (p) removeWishlistItem(p);
 }
 
 function removeWishlistItem(product) {

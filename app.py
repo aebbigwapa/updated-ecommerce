@@ -36,12 +36,13 @@ def create_app():
         return Response(FAVICON_DATA, mimetype='image/x-icon')
 
     # ── CORS configuration for Flutter mobile app ────────────────────────
+    allowed_origins = os.getenv('ALLOWED_ORIGINS', '').split(',') if os.getenv('ALLOWED_ORIGINS') else ["*"]
     CORS(app, resources={
         r"/api/*": {
-            "origins": ["*"],  # Configure appropriately for production
+            "origins": allowed_origins,
             "methods": ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
             "allow_headers": ["Content-Type", "Authorization", "X-Auth-Token"],
-            "supports_credentials": True
+            "supports_credentials": len(allowed_origins) > 0 and allowed_origins != ["*"]
         }
     })
 
@@ -72,6 +73,7 @@ def create_app():
     from routes.api.seller_api import seller_api_bp
     from routes.api.admin_api import admin_api_bp as mobile_admin_api_bp
     from routes.api.rider_api import rider_api_bp
+    from routes.api.messages_api import messages_api_bp
     
     app.register_blueprint(auth_bp)
     app.register_blueprint(admin_bp, url_prefix='/admin')
@@ -88,6 +90,7 @@ def create_app():
     app.register_blueprint(seller_api_bp,    url_prefix='/api')
     app.register_blueprint(mobile_admin_api_bp, url_prefix='/api')
     app.register_blueprint(rider_api_bp,        url_prefix='/api')
+    app.register_blueprint(messages_api_bp,     url_prefix='/api')
 
     # Register API error handlers for Flutter compatibility
     from routes.api.api_helpers import register_api_error_handlers
@@ -118,4 +121,6 @@ def create_app():
 # For backward compatibility
 if __name__ == '__main__':
     app = create_app()
-    app.run(debug=True, host='0.0.0.0', port=5000, threaded=True)
+    debug = os.getenv('FLASK_DEBUG', 'false').lower() == 'true'
+    host = os.getenv('FLASK_HOST', '0.0.0.0')
+    app.run(debug=debug, host=host, port=5000, threaded=True)

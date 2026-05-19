@@ -183,7 +183,17 @@ def get_current_user() -> Optional[Dict[str, Any]]:
                 "role":  payload.get("role", "user"),
             }
 
-    # 2) Session-based fallback
+    # 2) Session-based fallback — Flask web app stores user as session['user'] dict
+    if session.get("user") and isinstance(session["user"], dict):
+        u = session["user"]
+        return {
+            "id":    u.get("id"),
+            "email": u.get("email"),
+            "role":  u.get("role", "user"),
+            "name":  u.get("name") or f"{u.get('first_name','')} {u.get('last_name','')}".strip(),
+        }
+
+    # 3) Older session keys (user_id / user_email stored flat)
     if session.get("user_id"):
         return {
             "id":    session.get("user_id"),
@@ -200,7 +210,11 @@ def token_required(fn: Callable) -> Callable:
     def _wrap(*args, **kwargs):
         user = get_current_user()
         if not user or not user.get("id"):
-            return api_error("Authentication required", status=401)
+            return api_error(
+                "Authentication required",
+                status=401,
+                data={"require_login": True}
+            )
         request.current_user = user  # type: ignore[attr-defined]
         return fn(*args, **kwargs)
     return _wrap

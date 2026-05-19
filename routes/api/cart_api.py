@@ -143,3 +143,59 @@ def clear_cart():
         return api_response(data=_cart_payload(user['id']), message="Cart cleared", status=200)
     except Exception as e:
         return api_error(f"Failed to clear cart: {e}", status=500)
+
+
+@cart_api_bp.post('/cart/merge')
+@token_required
+def merge_guest_cart():
+    """Merge guest cart (from localStorage) into user's database cart on login."""
+    user = request.current_user  # type: ignore[attr-defined]
+    data = get_json_body()
+    guest_items = data.get('guest_cart', [])
+    
+    if not isinstance(guest_items, list):
+        return api_error("Invalid guest cart format", status=400)
+    
+    try:
+        from models.order_model import OrderModel
+        from models.product_model import ProductModel
+        
+        order_model = OrderModel()
+        product_model = ProductModel()
+        merged_count = 0
+        
+        for item in guest_items:
+            product_id = item.get('product_id')
+            variant_id = item.get('variant_id')
+            quantity = int(item.get('quantity', 1))
+            
+            if not product_id or quantity <= 0:
+                continue
+            
+            # Validate product exists and is active
+            product = product_model.get_by_id(product_id)
+            if not product or product.get('status') != 'active':
+                continue
+            
+            # Use current price from database (don't trust client)
+            price_snapshot = float(product.get('price', 0))
+            
+            # Add or increment in user's cart
+            result = order_model.add_or_increment_cart_item(
+                user_id=user['id'],
+                product_id=product_id,
+                variant_id=variant_id,
+                quantity=quantity,
+                price_snapshot=price_snapshot
+            )
+            
+            if result:
+                merged_count += 1
+        
+        return api_response(
+            data={'cart': _cart_payload(user['id']), 'merged_count': merged_count},
+            message=f"Merged {merged_count} item(s) from guest cart",
+            status=200
+        )
+    except Exception as e:
+        return api_error(f"Failed to merge cart: {e}", status=500)

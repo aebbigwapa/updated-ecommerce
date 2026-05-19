@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
@@ -40,23 +40,25 @@
         .badge-pending       { background:#fff3cd; color:#856404; }
         .badge-processing    { background:#cff4fc; color:#055160; }
         .badge-ready_for_pickup { background:#d1ecf1; color:#0c5460; }
-        .badge-in_transit    { background:#e2d9f3; color:#432874; }
+        .badge-shipped       { background:#dbeafe; color:#1e40af; }
+        .badge-out_for_delivery { background:#fde68a; color:#92400e; }
         .badge-delivered     { background:#d1e7dd; color:#0a3622; }
         .badge-cancelled     { background:#f8d7da; color:#842029; }
+        .badge-return_requested { background:#fce7f3; color:#9d174d; }
 
-        /* ── Order body ── */
         .ord-body { padding:14px 18px; }
         .ord-item-row {
             display:flex; align-items:center; gap:10px;
-            padding:6px 0; border-bottom:1px solid #f8f9fa; font-size:13px;
+            padding:8px 0; border-bottom:1px solid #f8f9fa; font-size:13px;
+            flex-wrap:wrap;
         }
         .ord-item-row:last-child { border-bottom:none; }
         .ord-item-name { flex:1; color:#1a1a3e; font-weight:500; }
-        .ord-item-qty  { color:#adb5bd; font-size:12px; }
-        .ord-item-price { color:#FF2BAC; font-weight:600; font-size:13px; }
+        .ord-item-qty  { color:#adb5bd; font-size:12px; min-width:40px; }
+        .ord-item-price { color:#FF2BAC; font-weight:600; font-size:13px; min-width:96px; text-align:right; }
+        .ord-item-actions { display:flex; gap:8px; flex-wrap:wrap; justify-content:flex-end; }
         .ord-color-dot { width:10px; height:10px; border-radius:50%; border:1px solid #e8e8f0; flex-shrink:0; }
 
-        /* ── Order footer ── */
         .ord-footer {
             display:flex; justify-content:space-between; align-items:center;
             padding:12px 18px; background:#fafafa; border-top:1px solid #f0f0f8;
@@ -64,26 +66,29 @@
         }
         .ord-total { font-size:15px; font-weight:700; color:#1a1a3e; }
         .ord-total span { color:#FF2BAC; }
-        .ord-actions { display:flex; gap:8px; align-items:center; }
-        .ord-btn-view {
-            padding:7px 16px; border-radius:8px; font-size:12px; font-weight:600;
-            background:linear-gradient(135deg,#FF2BAC,#FF6BCE); color:#fff;
-            text-decoration:none; border:none; cursor:pointer; transition:all .2s;
+        .ord-actions { display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
+        .ord-btn-view,
+        .ord-btn-action {
+            padding:8px 16px; border-radius:10px; font-size:12px; font-weight:600;
+            border:none; cursor:pointer; transition:all .2s;
         }
-        .ord-btn-view:hover { box-shadow:0 4px 12px rgba(255,43,172,.3); color:#fff; transform:translateY(-1px); }
-        .ord-btn-cancel {
-            padding:7px 14px; border-radius:8px; font-size:12px; font-weight:600;
-            background:#fff; color:#e74c3c; border:1.5px solid #e74c3c; cursor:pointer; transition:all .2s;
-        }
+        .ord-btn-view { background:linear-gradient(135deg,#FF2BAC,#FF6BCE); color:#fff; text-decoration:none; }
+        .ord-btn-view:hover { box-shadow:0 4px 12px rgba(255,43,172,.3); transform:translateY(-1px); }
+        .ord-btn-action { background:#fff; color:#1a1a3e; border:1px solid #e8e8f0; }
+        .ord-btn-action:hover { background:#f8f9fa; }
+        .ord-btn-cancel { color:#e74c3c; border-color:#e74c3c; }
         .ord-btn-cancel:hover { background:#e74c3c; color:#fff; }
+        .ord-btn-confirm { color:#0d6efd; border-color:#0d6efd; }
+        .ord-btn-return { color:#6f42c1; border-color:#6f42c1; }
+        .ord-btn-review { color:#198754; border-color:#198754; }
+        .ord-btn-disabled { opacity:.6; pointer-events:none; }
 
-        /* ── Progress bar ── */
         .ord-progress { padding:10px 18px 14px; }
         .ord-progress-track {
             display:flex; align-items:center; position:relative;
         }
         .ord-progress-track::before {
-            content:''; position:absolute; top:10px; left:10px; right:10px;
+            content:''; position:absolute; top:10px; left:12px; right:12px;
             height:2px; background:#e8e8f0; z-index:0;
         }
         .ord-step { display:flex; flex-direction:column; align-items:center; flex:1; position:relative; z-index:1; }
@@ -98,20 +103,48 @@
         .ord-step.done .ord-step-label  { color:#10b981; }
         .ord-step.active .ord-step-label { color:#FF2BAC; font-weight:600; }
 
-        /* ── Skeleton ── */
-        .skel { background:linear-gradient(90deg,#f0f0f0 25%,#e8e8e8 50%,#f0f0f0 75%); background-size:200% 100%; animation:shimmer 1.4s infinite; border-radius:8px; }
-        @keyframes shimmer { 0%{background-position:200% 0} 100%{background-position:-200% 0} }
+        .modal-shell {
+            position:fixed; top:0; left:0; right:0; bottom:0; z-index:1050;
+            background:rgba(0,0,0,.35); display:flex; align-items:center; justify-content:center;
+            padding:15px; opacity:0; pointer-events:none; transition:opacity .2s;
+        }
+        .modal-shell.open { opacity:1; pointer-events:auto; }
+        .modal-panel {
+            width:100%; max-width:640px; background:#fff; border-radius:18px; overflow:hidden;
+            box-shadow:0 20px 60px rgba(0,0,0,.18);
+        }
+        .modal-header { padding:18px 22px; border-bottom:1px solid #f0f0f8; display:flex; justify-content:space-between; align-items:center; }
+        .modal-title { margin:0; font-size:18px; font-weight:700; color:#1a1a3e; }
+        .modal-close { background:none;border:none;font-size:22px;color:#6c757d;cursor:pointer; }
+        .modal-body { padding:18px 22px; max-height:70vh; overflow:auto; }
+        .modal-footer { padding:16px 22px; background:#fafafa; display:flex; gap:10px; justify-content:flex-end; flex-wrap:wrap; }
+        .modal-note { color:#6c757d; font-size:13px; margin-top:8px; }
+        .field-group { margin-bottom:16px; }
+        .field-group label { display:block; font-weight:600; font-size:13px; margin-bottom:6px; color:#343a40; }
+        .field-group input[type=text], .field-group input[type=number], .field-group select, .field-group textarea {
+            width:100%; border:1px solid #dfe2e8; border-radius:10px; padding:10px 12px; font-size:14px;
+            color:#344050; background:#fff;
+        }
+        .field-group textarea { min-height:120px; resize:vertical; }
+        .field-error { color:#c92a2a; font-size:12px; margin-top:4px; }
+        .return-item-row { display:grid; grid-template-columns:1fr auto; gap:10px; padding:12px 0; border-bottom:1px solid #f1f3f5; }
+        .return-item-row:last-child { border-bottom:none; }
+        .thumb-grid { display:flex; gap:10px; flex-wrap:wrap; margin-top:10px; }
+        .thumb-preview { width:72px; height:72px; border:1px solid #e8e8f0; border-radius:12px; position:relative; overflow:hidden; background:#f8f9fa; }
+        .thumb-preview img { width:100%; height:100%; object-fit:cover; }
+        .thumb-remove { position:absolute; top:6px; right:6px; width:20px; height:20px; border-radius:50%; border:none; background:rgba(0,0,0,.65); color:#fff; font-size:14px; cursor:pointer; }
+        .rating-stars { display:flex; gap:6px; font-size:24px; margin-top:6px; }
+        .star { cursor:pointer; color:#d1d5db; transition:color .2s; }
+        .star.selected, .star.hover { color:#f59e0b; }
 
-        /* ── Empty ── */
-        .ord-empty { text-align:center; padding:60px 20px; }
-        .ord-empty-icon { font-size:56px; margin-bottom:16px; }
-        .ord-empty h5 { font-family:'Playfair Display',serif; color:#1a1a3e; margin-bottom:8px; }
-        .ord-empty p  { color:#adb5bd; font-size:14px; margin-bottom:20px; }
+        .shop-toast { position:fixed; bottom:20px; left:50%; transform:translateX(-50%); padding:12px 18px; border-radius:999px; background:#1a1a3e; color:#fff; font-size:13px; opacity:0; pointer-events:none; transition:opacity .3s; z-index:1100; }
+        .shop-toast.show { opacity:1; }
 
         @media(max-width:576px) {
             .ord-header, .ord-footer { flex-direction:column; align-items:flex-start; }
             .ord-actions { width:100%; }
-            .ord-btn-view, .ord-btn-cancel { flex:1; text-align:center; }
+            .ord-btn-view, .ord-btn-action { width:100%; text-align:center; }
+            .return-item-row { grid-template-columns:1fr; }
         }
     </style>
 </head>
@@ -126,46 +159,41 @@
     </nav>
 
     <div class="row g-4">
-
-        <!-- Sidebar -->
         <div class="col-12 col-md-3">
             <div class="settings-card mb-3">
                 <div style="font-size:10px;font-weight:700;color:#adb5bd;text-transform:uppercase;letter-spacing:.8px;padding:0 4px 8px">Account</div>
                 <div class="settings-nav d-flex flex-column gap-1">
-                    <a href="/buyer/orders"       class="nav-link active"><span class="icon">📦</span> My Orders</a>
+                    <a href="/buyer/orders" class="nav-link active"><span class="icon">📦</span> My Orders</a>
                     <a href="/buyer/address_book" class="nav-link"><span class="icon">📍</span> Addresses</a>
                 </div>
             </div>
             <div class="settings-card">
                 <div style="font-size:10px;font-weight:700;color:#adb5bd;text-transform:uppercase;letter-spacing:.8px;padding:0 4px 8px">Settings</div>
                 <div class="settings-nav d-flex flex-column gap-1">
-                    <a href="/buyer/settings"                 class="nav-link"><span class="icon">👤</span> Profile</a>
+                    <a href="/buyer/settings" class="nav-link"><span class="icon">👤</span> Profile</a>
                     <a href="/buyer/settings#sectionPassword" class="nav-link"><span class="icon">🔑</span> Password</a>
-                    <a href="/buyer/settings#sectionNotif"    class="nav-link"><span class="icon">🔔</span> Notifications</a>
+                    <a href="/buyer/settings#sectionNotif" class="nav-link"><span class="icon">🔔</span> Notifications</a>
                     <a href="/buyer/settings#sectionSecurity" class="nav-link"><span class="icon">🛡️</span> Security</a>
                 </div>
             </div>
         </div>
 
-        <!-- Main -->
         <div class="col-12 col-md-9">
             <div class="d-flex justify-content-between align-items-center mb-3">
                 <h5 style="font-family:'Playfair Display',serif;color:#1a1a3e;margin:0">My Orders</h5>
                 <span id="ordCount" style="font-size:12px;color:#adb5bd"></span>
             </div>
 
-            <!-- Filter tabs -->
             <div class="ord-tabs" id="ordTabs">
-                <button class="ord-tab active" onclick="filterOrders('all',this)">All</button>
-                <button class="ord-tab" onclick="filterOrders('pending',this)">Pending</button>
-                <button class="ord-tab" onclick="filterOrders('processing',this)">Processing</button>
-                <button class="ord-tab" onclick="filterOrders('ready_for_pickup',this)">Ready for Pickup</button>
-                <button class="ord-tab" onclick="filterOrders('in_transit',this)">In Transit</button>
-                <button class="ord-tab" onclick="filterOrders('delivered',this)">Delivered</button>
-                <button class="ord-tab" onclick="filterOrders('cancelled',this)">Cancelled</button>
+                <button class="ord-tab active" onclick="filterOrders('all', this)">All</button>
+                <button class="ord-tab" onclick="filterOrders('pending', this)">Pending</button>
+                <button class="ord-tab" onclick="filterOrders('processing', this)">Processing</button>
+                <button class="ord-tab" onclick="filterOrders('shipped', this)">Shipped</button>
+                <button class="ord-tab" onclick="filterOrders('out_for_delivery', this)">Out for Delivery</button>
+                <button class="ord-tab" onclick="filterOrders('delivered', this)">Delivered</button>
+                <button class="ord-tab" onclick="filterOrders('cancelled', this)">Cancelled</button>
             </div>
 
-            <!-- Skeleton -->
             <div id="ordSkeleton">
                 {% for _ in range(3) %}
                 <div class="ord-card mb-3">
@@ -185,81 +213,338 @@
                 {% endfor %}
             </div>
 
-            <!-- Orders list -->
             <div id="ordersList" style="display:none"></div>
         </div>
     </div>
 </div>
 
 <div class="shop-toast" id="shopToast"></div>
+
+<div id="cancelOrderModal" class="modal-shell" role="dialog" aria-modal="true" aria-hidden="true">
+    <div class="modal-panel">
+        <div class="modal-header">
+            <h2 class="modal-title">Cancel Order</h2>
+            <button class="modal-close" type="button" onclick="closeModal('cancelOrderModal')">×</button>
+        </div>
+        <div class="modal-body">
+            <div id="cancelModalMessage" style="margin-bottom:16px;"></div>
+            <div id="cancelEligibilityNote" style="padding:12px 14px;background:#fff3cd;border-radius:8px;margin-bottom:16px;font-size:13px;color:#856404;border-left:3px solid #ffc107;display:none;"></div>
+            <div class="field-group">
+                <label for="cancelReason">Reason for cancellation (optional for instant cancellations)</label>
+                <textarea id="cancelReason" maxlength="200" placeholder="Tell us why you want to cancel this order" style="min-height:100px;"></textarea>
+                <div class="field-error" id="cancelReasonError"></div>
+            </div>
+            <div id="cancelAdditionalInfo" style="margin-top:16px;padding:12px 14px;background:#f0f7ff;border-radius:8px;border-left:3px solid #0d6efd;font-size:13px;color:#0c5460;display:none;"></div>
+            <div class="field-error" id="cancelModalError"></div>
+        </div>
+        <div class="modal-footer">
+            <button class="ord-btn-action" type="button" onclick="closeModal('cancelOrderModal')">Keep Order</button>
+            <button id="cancelConfirmButton" class="ord-btn-action ord-btn-cancel" type="button" onclick="submitCancelOrder()">Cancel Order</button>
+        </div>
+    </div>
+</div>
+
+<div id="confirmReceivedModal" class="modal-shell" role="dialog" aria-modal="true" aria-hidden="true">
+    <div class="modal-panel">
+        <div class="modal-header">
+            <h2 class="modal-title">Confirm Received</h2>
+            <button class="modal-close" type="button" onclick="closeModal('confirmReceivedModal')">×</button>
+        </div>
+        <div class="modal-body">
+            <p id="confirmReceivedMessage">I confirm that I have received this order.</p>
+            <div class="field-error" id="confirmReceivedError"></div>
+        </div>
+        <div class="modal-footer">
+            <button class="ord-btn-action" type="button" onclick="closeModal('confirmReceivedModal')">Back</button>
+            <button id="confirmReceivedButton" class="ord-btn-action ord-btn-confirm" type="button" onclick="submitConfirmReceived()">Confirm</button>
+        </div>
+    </div>
+</div>
+
+<div id="returnModal" class="modal-shell" role="dialog" aria-modal="true" aria-hidden="true">
+    <div class="modal-panel">
+        <div class="modal-header">
+            <h2 class="modal-title">Return / Refund Request</h2>
+            <button class="modal-close" type="button" onclick="closeModal('returnModal')">×</button>
+        </div>
+        <div class="modal-body">
+            <div class="field-group">
+                <label>Items to return</label>
+                <div id="returnItemsContainer"></div>
+                <div class="field-error" id="returnItemsError"></div>
+            </div>
+            <div class="field-group">
+                <label for="returnReason">Reason for return</label>
+                <select id="returnReason">
+                    <option value="">Select a reason</option>
+                    <option value="Defective">Defective</option>
+                    <option value="Wrong Item">Wrong Item</option>
+                    <option value="Damaged">Damaged</option>
+                    <option value="Not as Described">Not as Described</option>
+                    <option value="Other">Other</option>
+                </select>
+                <div class="field-error" id="returnReasonError"></div>
+            </div>
+            <div class="field-group">
+                <label for="returnDescription">Additional details (optional)</label>
+                <textarea id="returnDescription" maxlength="500" placeholder="Explain the issue or request"></textarea>
+            </div>
+            <div class="field-group">
+                <label for="returnImages">Upload images (up to 3)</label>
+                <input id="returnImages" type="file" accept="image/jpeg,image/png,image/webp" multiple />
+                <div class="thumb-grid" id="returnImagesPreview"></div>
+                <div class="field-error" id="returnImagesError"></div>
+            </div>
+            <div class="field-group">
+                <label><input id="returnConfirmPolicy" type="checkbox" /> I agree to the return/refund policy</label>
+                <div class="field-error" id="returnPolicyError"></div>
+            </div>
+            <div class="field-error" id="returnRequestError"></div>
+        </div>
+        <div class="modal-footer">
+            <button class="ord-btn-action" type="button" onclick="closeModal('returnModal')">Cancel</button>
+            <button id="submitReturnButton" class="ord-btn-action ord-btn-return" type="button" onclick="submitReturnRequest()">Submit Return Request</button>
+        </div>
+    </div>
+</div>
+
+<div id="reviewModal" class="modal-shell" role="dialog" aria-modal="true" aria-hidden="true">
+    <div class="modal-panel">
+        <div class="modal-header">
+            <h2 class="modal-title">Write a Review</h2>
+            <button class="modal-close" type="button" onclick="closeModal('reviewModal')">×</button>
+        </div>
+        <div class="modal-body">
+            <div id="reviewProductInfo" style="margin-bottom:16px;"></div>
+            <div class="field-group">
+                <label>Rating</label>
+                <div class="rating-stars" id="reviewStars"></div>
+                <div class="field-error" id="reviewRatingError"></div>
+            </div>
+            <div class="field-group">
+                <label for="reviewText">Review</label>
+                <textarea id="reviewText" maxlength="500" placeholder="Share your experience (optional)"></textarea>
+            </div>
+            <div class="field-group">
+                <label for="reviewImages">Upload photos (up to 3)</label>
+                <input id="reviewImages" type="file" accept="image/jpeg,image/png,image/webp" multiple />
+                <div class="thumb-grid" id="reviewImagesPreview"></div>
+                <div class="field-error" id="reviewImagesError"></div>
+            </div>
+            <div class="field-error" id="reviewSubmitError"></div>
+        </div>
+        <div class="modal-footer">
+            <button class="ord-btn-action" type="button" onclick="closeModal('reviewModal')">Close</button>
+            <button id="submitReviewButton" class="ord-btn-action ord-btn-review" type="button" onclick="submitReview()">Submit Review</button>
+        </div>
+    </div>
+</div>
+
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
 <script src="{{ url_for('static', filename='js/api.js') }}"></script>
 <script>
 const CSRF = () => document.querySelector('meta[name="csrf-token"]')?.content || '';
-
-async function updateCartBadge() {
-    const res = await fetch('/buyer/api/cart').then(r => r.json()).catch(() => null);
-    const items = (res && res.data && Array.isArray(res.data.items)) ? res.data.items
-        : (res && Array.isArray(res.items)) ? res.items : [];
-    const total = items.reduce((s, i) => s + Number(i.quantity || 0), 0);
-    document.querySelectorAll('.cart-count').forEach(el => {
-        el.textContent = total;
-        el.style.display = total > 0 ? 'flex' : 'none';
-    });
-}
-
-function showToast(msg, isError = false) {
-    const t = document.getElementById('shopToast');
-    if (!t) return;
-    t.textContent = msg;
-    t.style.background = isError ? '#c0392b' : '#1a1a3e';
-    t.classList.add('show');
-    setTimeout(() => t.classList.remove('show'), 3000);
-}
-
+const cancellableStatuses = ['pending','payment_confirmed','processing'];
+const confirmReceivedStatuses = ['shipped','out_for_delivery','in_transit'];
+const returnWindowDays = 7;
 let allOrders = [];
+let activeCancelOrderId = null;
+let activeConfirmOrderId = null;
+let activeReturnOrderId = null;
+let activeReviewOrderId = null;
+let activeReviewItemId = null;
+let activeReturnFiles = [];
+let activeReviewFiles = [];
+let selectedRating = 0;
 
-async function initOrdersPage() {
-    const raw = await API.buyer.getOrders().catch(() => null);
-    allOrders = Array.isArray(raw) ? raw : (raw && raw.orders ? raw.orders : []);
-    document.getElementById('ordSkeleton').style.display = 'none';
-    document.getElementById('ordersList').style.display = 'block';
-    renderOrders(allOrders);
+function showToast(message, isError = false) {
+    const toast = document.getElementById('shopToast');
+    if (!toast) return;
+    toast.textContent = message;
+    toast.style.background = isError ? '#c0392b' : '#1a1a3e';
+    toast.classList.add('show');
+    clearTimeout(toast.hideTimeout);
+    toast.hideTimeout = setTimeout(() => toast.classList.remove('show'), 3200);
 }
 
-function filterOrders(status, btn) {
-    document.querySelectorAll('.ord-tab').forEach(b => b.classList.remove('active'));
-    btn.classList.add('active');
-    const filtered = status === 'all' ? allOrders : allOrders.filter(o => o.status === status);
-    renderOrders(filtered);
+function safeText(text) {
+    const div = document.createElement('div');
+    div.textContent = text || '';
+    return div.innerHTML;
 }
 
-const STATUS_STEPS = ['pending','processing','ready_for_pickup','in_transit','delivered'];
+function toggleModal(modalId, show) {
+    const shell = document.getElementById(modalId);
+    if (!shell) return;
+    shell.classList.toggle('open', show);
+    shell.setAttribute('aria-hidden', show ? 'false' : 'true');
+    if (!show) {
+        if (modalId === 'returnModal') resetReturnModal();
+        if (modalId === 'reviewModal') resetReviewModal();
+        if (modalId === 'cancelOrderModal') clearModalError('cancelModalError');
+        if (modalId === 'confirmReceivedModal') clearModalError('confirmReceivedError');
+    }
+}
+
+function closeModal(modalId) {
+    toggleModal(modalId, false);
+}
+
+function openModal(modalId) {
+    toggleModal(modalId, true);
+}
+
+function clearModalError(elementId) {
+    const el = document.getElementById(elementId);
+    if (el) el.textContent = '';
+}
+
+function setModalError(elementId, message) {
+    const el = document.getElementById(elementId);
+    if (el) el.textContent = message || '';
+}
+
+function createIdempotencyKey(prefix) {
+    const storageKey = `idempotency_${prefix}`;
+    let key = sessionStorage.getItem(storageKey);
+    if (!key) {
+        key = crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+        sessionStorage.setItem(storageKey, key);
+    }
+    return key;
+}
+
+function removeIdempotencyKey(prefix) {
+    sessionStorage.removeItem(`idempotency_${prefix}`);
+}
+
+function formatCurrency(value) {
+    return `₱${Number(value || 0).toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+}
+
+function formatDate(value) {
+    if (!value) return '—';
+    const date = new Date(value);
+    return isNaN(date) ? '—' : date.toLocaleDateString('en-PH', { year:'numeric', month:'short', day:'numeric' });
+}
+
+function isReturnEligible(order) {
+    if (!order || order.status !== 'delivered') return false;
+    const deliveredAt = order.delivery_confirmed_at || order.delivered_at || order.received_at || order.completed_at;
+    if (!deliveredAt) return false;
+    const deadline = new Date(deliveredAt);
+    deadline.setDate(deadline.getDate() + returnWindowDays);
+    return new Date() <= deadline && !['cancelled','return_requested'].includes((order.return_status || '').toLowerCase());
+}
+
+function isReviewEligible(order, item) {
+    if (!order || order.status !== 'delivered') return false;
+    if ((order.return_status || '').toLowerCase() !== '' && (order.return_status || '').toLowerCase() !== 'none') return false;
+    return item && !item.reviewed;
+}
+
+function isOrderCancellable(order) {
+    return order && cancellableStatuses.includes(order.status);
+}
+
+function isOrderConfirmable(order) {
+    // Can confirm if order is in_transit and has proof of delivery
+    return order && order.status === 'in_transit' && order.proof_of_delivery_url;
+}
 
 function badgeClass(status) {
     return 'badge-' + (status || 'pending');
 }
 
+const STATUS_STEPS = ['pending','processing','ready_for_pickup','shipped','out_for_delivery','delivered'];
+
 function progressHtml(status) {
     const idx = STATUS_STEPS.indexOf(status);
     if (idx === -1) return '';
-    const labels = ['Pending','Processing','Ready','In Transit','Delivered'];
-    return `<div class="ord-progress">
-        <div class="ord-progress-track">
-            ${STATUS_STEPS.map((s, i) => `
-                <div class="ord-step ${i < idx ? 'done' : ''} ${i === idx ? 'active' : ''}">
-                    <div class="ord-step-dot">${i < idx ? '✓' : i + 1}</div>
-                    <div class="ord-step-label">${labels[i]}</div>
-                </div>`).join('')}
-        </div>
-    </div>`;
+    const labels = ['Pending','Processing','Ready','Shipped','Out for Delivery','Delivered'];
+    return `<div class="ord-progress"><div class="ord-progress-track">${STATUS_STEPS.map((s,i) => `
+            <div class="ord-step ${i < idx ? 'done' : ''} ${i === idx ? 'active' : ''}">
+                <div class="ord-step-dot">${i < idx ? '✓' : i + 1}</div>
+                <div class="ord-step-label">${labels[i]}</div>
+            </div>`).join('')}</div></div>`;
+}
+
+function buildOrderCard(order) {
+    const orderId = order.order_id || order.id || '';
+    const status = order.status || 'pending';
+    const total = formatCurrency(order.total_price ?? order.total ?? 0);
+    const createdAt = formatDate(order.created_at);
+    const proofUrl = order.proof_of_delivery_url || '';
+    const items = Array.isArray(order.items) ? order.items : [];
+    const itemRows = items.map(item => {
+        const productName = safeText(item.product_name || item.name || 'Product');
+        const variantLabel = safeText(item.variant_label || item.variant || '');
+        const quantity = Number(item.quantity || 1);
+        const price = formatCurrency(item.final_price ?? item.unit_price ?? 0);
+        const imageUrl = item.image ? safeText(item.image) : '';
+        const canReview = isReviewEligible(order, item);
+        const reviewed = item.reviewed ? `<span style="font-size:12px;color:#6c757d">Review submitted</span>` : '';
+        const reviewButton = canReview ? `<button class="ord-btn-action ord-btn-review" type="button" onclick="openReviewModal('${orderId}','${item.order_item_id || item.id || ''}')">Write a Review</button>` : reviewed;
+        return `
+            <div class="ord-item-row">
+                <div style="width:56px;min-width:56px;flex-shrink:0;">
+                    <div style="width:56px;height:56px;border-radius:14px;overflow:hidden;border:1px solid #e8e8f0;background:#f8f9fa;">
+                        ${imageUrl ? `<img src="${imageUrl}" alt="${productName}" style="width:100%;height:100%;object-fit:cover;" />` : `<div style="width:100%;height:100%;display:flex;align-items:center;justify-content:center;color:#adb5bd;font-size:18px">?</div>`}
+                    </div>
+                </div>
+                <div class="ord-item-name">
+                    <strong>${productName}</strong>
+                    ${variantLabel ? `<div style="font-size:12px;color:#6c757d;margin-top:4px">${variantLabel}</div>` : ''}
+                </div>
+                <div class="ord-item-qty">×${quantity}</div>
+                <div class="ord-item-price">${price}</div>
+                <div class="ord-item-actions">${reviewButton}</div>
+            </div>`;
+    }).join('');
+    
+    // Proof of delivery section
+    const proofSection = proofUrl ? `
+        <div style="padding:14px 18px;border-top:1px solid #f0f0f8;background:#f8f9fb">
+            <div style="font-size:12px;font-weight:600;color:#1a1a3e;margin-bottom:8px">📸 Proof of Delivery</div>
+            <img src="${safeText(proofUrl)}" alt="Proof of Delivery" onclick="window.open(this.src)" style="max-width:200px;border-radius:8px;cursor:pointer;box-shadow:0 2px 8px rgba(0,0,0,.1)" />
+        </div>` : '';
+    
+    const actions = [];
+    if (isOrderCancellable(order)) {
+        actions.push(`<button class="ord-btn-action ord-btn-cancel" type="button" onclick="openCancelModal('${orderId}')">Cancel</button>`);
+    }
+    if (isOrderConfirmable(order)) {
+        actions.push(`<button class="ord-btn-action ord-btn-confirm" type="button" onclick="openConfirmReceivedModal('${orderId}')">Confirm Received</button>`);
+    }
+    if (isReturnEligible(order)) {
+        actions.push(`<button class="ord-btn-action ord-btn-return" type="button" onclick="openReturnModal('${orderId}')">Return / Refund</button>`);
+    }
+    actions.push(`<a href="/buyer/order_summary?id=${encodeURIComponent(orderId)}" class="ord-btn-view">View Details</a>`);
+    return `
+        <div class="ord-card" id="orderCard_${safeText(orderId)}">
+            <div class="ord-header">
+                <div>
+                    <div class="ord-id">Order #${safeText((orderId || '').slice(0,8).toUpperCase())}</div>
+                    <div class="ord-date">${createdAt} · ${safeText((order.payment_method || 'COD').toString().replace(/_/g, ' ').toUpperCase())}</div>
+                </div>
+                <span class="ord-badge ${badgeClass(status)}">${safeText((status || '').replace(/_/g, ' '))}</span>
+            </div>
+            <div class="ord-body">
+                ${itemRows}
+            </div>
+            ${proofSection}
+            ${status !== 'cancelled' ? progressHtml(status) : ''}
+            <div class="ord-footer">
+                <div class="ord-total">Total: <span>${total}</span></div>
+                <div class="ord-actions">${actions.join('')}</div>
+            </div>
+        </div>`;
 }
 
 function renderOrders(data) {
     const container = document.getElementById('ordersList');
-    const countEl   = document.getElementById('ordCount');
-    if (countEl) countEl.textContent = data.length + ' order' + (data.length !== 1 ? 's' : '');
-
+    const countEl = document.getElementById('ordCount');
+    if (countEl) countEl.textContent = `${data.length} order${data.length !== 1 ? 's' : ''}`;
     if (!data || !data.length) {
         container.innerHTML = `
             <div class="ord-empty">
@@ -270,65 +555,525 @@ function renderOrders(data) {
             </div>`;
         return;
     }
+    container.innerHTML = data.map(buildOrderCard).join('');
+}
 
-    container.innerHTML = data.map(o => {
-        const orderId    = o.order_id || o.id || '';
-        const total      = o.total_price ?? o.total ?? 0;
-        const status     = o.status || 'pending';
-        const orderItems = o.items || [];
-        const createdAt  = o.created_at
-            ? new Date(o.created_at).toLocaleDateString('en-PH', {year:'numeric',month:'short',day:'numeric'})
-            : '—';
+let activeFilter = 'all';
 
-        const itemsHtml = orderItems.slice(0, 3).map(item => {
-            const variant  = item.variant || {};
-            const colorHex = variant.color_hex || '';
-            return `<div class="ord-item-row">
-                ${colorHex ? `<div class="ord-color-dot" style="background:${colorHex}"></div>` : '<div style="width:10px"></div>'}
-                <span class="ord-item-name">${item.product_name || 'Product'}</span>
-                <span class="ord-item-qty">×${item.quantity || 1}</span>
-                <span class="ord-item-price">₱${Number(item.final_price || item.unit_price || 0).toLocaleString('en-PH',{minimumFractionDigits:2})}</span>
-            </div>`;
-        }).join('');
+async function initOrdersPage() {
+    document.getElementById('ordSkeleton').style.display = 'block';
+    document.getElementById('ordersList').style.display = 'none';
+    const response = await API.buyer.getOrders().catch(() => null);
+    // _unwrap in api.js merges data fields to top level, so orders array is at response.orders
+    allOrders = Array.isArray(response?.orders) ? response.orders
+              : Array.isArray(response)          ? response
+              : [];
+    document.getElementById('ordSkeleton').style.display = 'none';
+    document.getElementById('ordersList').style.display = 'block';
+    applyFilter();
+}
 
-        const moreCount = orderItems.length - 3;
+function applyFilter() {
+    const filtered = activeFilter === 'all' ? allOrders : allOrders.filter(o => o.status === activeFilter);
+    renderOrders(filtered);
+}
 
-        return `
-        <div class="ord-card">
-            <div class="ord-header">
+function filterOrders(status, btn) {
+    document.querySelectorAll('.ord-tab').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    activeFilter = status;
+    applyFilter();
+}
+
+function findOrder(orderId) {
+    return allOrders.find(o => (o.order_id || o.id || '') === orderId);
+}
+
+function openCancelModal(orderId) {
+    activeCancelOrderId = orderId;
+    clearModalError('cancelModalError');
+    clearModalError('cancelReasonError');
+    document.getElementById('cancelReason').value = '';
+    document.getElementById('cancelEligibilityNote').style.display = 'none';
+    document.getElementById('cancelAdditionalInfo').style.display = 'none';
+    
+    const order = findOrder(orderId);
+    if (order) {
+        document.getElementById('cancelModalMessage').textContent = `Cancel order #${orderId.slice(0,8).toUpperCase()}?`;
+    }
+    const button = document.getElementById('cancelConfirmButton');
+    if (button) {
+        button.disabled = true;
+        button.textContent = 'Checking eligibility…';
+    }
+    
+    // Check cancellation eligibility
+    fetch(`/buyer/api/orders/${encodeURIComponent(orderId)}/cancellation-eligibility`, {
+        method: 'GET',
+        headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': CSRF() }
+    })
+    .then(r => r.json())
+    .then(res => {
+        if (res && res.success && res.data) {
+            const elig = res.data;
+            if (!elig.canCancel) {
+                document.getElementById('cancelModalMessage').innerHTML = `<strong style="color:#e74c3c">❌ Cannot Cancel</strong><div style="margin-top:8px;color:#6c757d">${safeText(elig.message)}</div>`;
+                button.disabled = true;
+                button.textContent = 'Cannot Cancel';
+            } else {
+                if (elig.needsApproval) {
+                    document.getElementById('cancelEligibilityNote').textContent = '⏳ This cancellation requires seller approval. Your request will be sent to the seller for review.';
+                    document.getElementById('cancelEligibilityNote').style.display = 'block';
+                    if (elig.reasonRequired) {
+                        document.querySelector('label[for="cancelReason"]').textContent = 'Reason for cancellation (required)';
+                    }
+                } else {
+                    document.querySelector('label[for="cancelReason"]').textContent = 'Reason for cancellation (optional)';
+                }
+                button.disabled = false;
+                button.textContent = elig.needsApproval ? 'Request Cancellation' : 'Cancel Order';
+            }
+        }
+    })
+    .catch(() => {
+        button.disabled = false;
+        button.textContent = 'Cancel Order';
+    });
+    
+    openModal('cancelOrderModal');
+}
+
+async function submitCancelOrder() {
+    if (!activeCancelOrderId) return;
+    const button = document.getElementById('cancelConfirmButton');
+    if (button) { button.disabled = true; button.textContent = 'Processing…'; }
+    clearModalError('cancelModalError');
+    clearModalError('cancelReasonError');
+    
+    const reason = document.getElementById('cancelReason').value.trim() || '';
+    const key = createIdempotencyKey(`cancel-${activeCancelOrderId}`);
+    
+    try {
+        const res = await fetch(`/buyer/api/orders/${encodeURIComponent(activeCancelOrderId)}/cancel`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRF-Token': CSRF(),
+                'Idempotency-Key': key
+            },
+            body: JSON.stringify({ 
+                reason: reason,
+                idempotency_key: key 
+            })
+        }).then(r => r.json());
+        
+        if (res && res.success) {
+            const message = res.message || 'Order cancelled successfully.';
+            showToast(message);
+            closeModal('cancelOrderModal');
+            removeIdempotencyKey(`cancel-${activeCancelOrderId}`);
+            await refreshOrders();
+            return;
+        }
+        setModalError('cancelModalError', res.error || res.message || 'Unable to cancel the order.');
+    } catch (err) {
+        setModalError('cancelModalError', 'A network error occurred. Please try again.');
+    } finally {
+        if (button) { button.disabled = false; button.textContent = 'Cancel Order'; }
+    }
+}
+
+function openConfirmReceivedModal(orderId) {
+    activeConfirmOrderId = orderId;
+    setModalError('confirmReceivedError', '');
+    const order = findOrder(orderId);
+    if (order) {
+        const label = order.status === 'shipped' ? 'Shipped' : order.status === 'out_for_delivery' ? 'Out for Delivery' : 'In Transit';
+        document.getElementById('confirmReceivedMessage').textContent = `I confirm that I have received order #${orderId.slice(0,8).toUpperCase()} (${label}).`;
+    }
+    openModal('confirmReceivedModal');
+}
+
+async function submitConfirmReceived() {
+    if (!activeConfirmOrderId) return;
+    const button = document.getElementById('confirmReceivedButton');
+    if (button) { button.disabled = true; button.textContent = 'Confirming…'; }
+    clearModalError('confirmReceivedError');
+    const key = createIdempotencyKey(`confirm-${activeConfirmOrderId}`);
+    try {
+        const res = await fetch(`/buyer/api/orders/${encodeURIComponent(activeConfirmOrderId)}/confirm-received`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRF-Token': CSRF(),
+                'Idempotency-Key': key
+            },
+            body: JSON.stringify({ idempotency_key: key })
+        }).then(r => r.json());
+        if (res && res.success) {
+            showToast('Order confirmed received.');
+            closeModal('confirmReceivedModal');
+            removeIdempotencyKey(`confirm-${activeConfirmOrderId}`);
+            await refreshOrders();
+            return;
+        }
+        setModalError('confirmReceivedError', res.error || 'Unable to confirm receipt.');
+    } catch (err) {
+        setModalError('confirmReceivedError', 'A network error occurred. Please try again.');
+    } finally {
+        if (button) { button.disabled = false; button.textContent = 'Confirm'; }
+    }
+}
+
+function openReturnModal(orderId) {
+    activeReturnOrderId = orderId;
+    resetReturnModal();
+    const order = findOrder(orderId);
+    if (!order) {
+        showToast('Order data is unavailable.', true);
+        return;
+    }
+    const itemsContainer = document.getElementById('returnItemsContainer');
+    itemsContainer.innerHTML = '';
+    const items = Array.isArray(order.items) ? order.items : [];
+    items.forEach(item => {
+        const orderItemId = item.order_item_id || item.id || '';
+        const available = Number(item.quantity || 0) - Number(item.returned_quantity || 0);
+        if (available <= 0) return;
+        const productName = safeText(item.product_name || item.name || 'Product');
+        const variantLabel = safeText(item.variant_label || item.variant || '');
+        const imageUrl = item.image ? safeText(item.image) : '';
+        const row = document.createElement('div');
+        row.className = 'return-item-row';
+        row.innerHTML = `
+            <div style="display:flex;gap:12px;align-items:flex-start;">
+                <div style="width:72px;min-width:72px;height:72px;border-radius:14px;overflow:hidden;border:1px solid #e8e8f0;background:#f8f9fa;">
+                    ${imageUrl ? `<img src="${imageUrl}" alt="${productName}" style="width:100%;height:100%;object-fit:cover;" />` : `<div style="width:100%;height:100%;display:flex;align-items:center;justify-content:center;color:#adb5bd;font-size:18px">?</div>`}
+                </div>
                 <div>
-                    <div class="ord-id">Order #${orderId.slice(0,8).toUpperCase()}</div>
-                    <div class="ord-date">${createdAt} · ${o.payment_method ? o.payment_method.toUpperCase().replace('_',' ') : 'COD'}</div>
+                    <label style="font-weight:600"><input type="checkbox" data-return-item="${orderItemId}" onchange="toggleReturnItemSelection('${orderItemId}')" /> ${productName}</label>
+                    ${variantLabel ? `<div style="font-size:12px;color:#6c757d;margin-top:4px">${variantLabel}</div>` : ''}
+                    <div style="font-size:12px;color:#adb5bd;margin-top:6px">Available to return: ${available}</div>
                 </div>
-                <span class="ord-badge ${badgeClass(status)}">${status.replace(/_/g,' ')}</span>
             </div>
-            <div class="ord-body">
-                ${itemsHtml}
-                ${moreCount > 0 ? `<div style="font-size:11px;color:#adb5bd;padding:4px 0">+${moreCount} more item(s)</div>` : ''}
+            <div style="min-width:140px;display:flex;gap:6px;align-items:center;flex-wrap:wrap;justify-content:flex-end;">
+                <input id="returnQty_${orderItemId}" type="number" min="1" max="${available}" value="1" disabled style="width:80px;" />
+                <div style="font-size:12px;color:#adb5bd">of ${available}</div>
+            </div>`;
+        itemsContainer.appendChild(row);
+    });
+    if (!itemsContainer.innerHTML) {
+        itemsContainer.innerHTML = '<div style="color:#6c757d;font-size:13px">No items are eligible to be returned for this order.</div>';
+    }
+    activeReturnFiles = [];
+    document.getElementById('returnImagesPreview').innerHTML = '';
+    openModal('returnModal');
+}
+
+function toggleReturnItemSelection(itemId) {
+    const quantityInput = document.getElementById(`returnQty_${itemId}`);
+    const checkbox = document.querySelector(`input[data-return-item="${itemId}"]`);
+    if (!quantityInput || !checkbox) return;
+    quantityInput.disabled = !checkbox.checked;
+    if (checkbox.checked && Number(quantityInput.value) < 1) {
+        quantityInput.value = 1;
+    }
+}
+
+function resetReturnModal() {
+    activeReturnFiles = [];
+    document.getElementById('returnReason').value = '';
+    document.getElementById('returnDescription').value = '';
+    document.getElementById('returnConfirmPolicy').checked = false;
+    document.getElementById('returnImages').value = '';
+    document.getElementById('returnImagesPreview').innerHTML = '';
+    clearModalError('returnItemsError');
+    clearModalError('returnReasonError');
+    clearModalError('returnPolicyError');
+    clearModalError('returnImagesError');
+    clearModalError('returnRequestError');
+    const button = document.getElementById('submitReturnButton');
+    if (button) button.disabled = false;
+}
+
+function resetReviewModal() {
+    activeReviewFiles = [];
+    selectedRating = 0;
+    document.getElementById('reviewText').value = '';
+    document.getElementById('reviewImages').value = '';
+    document.getElementById('reviewImagesPreview').innerHTML = '';
+    document.getElementById('reviewProductInfo').innerHTML = '';
+    const stars = document.getElementById('reviewStars');
+    if (stars) stars.innerHTML = '';
+    clearModalError('reviewRatingError');
+    clearModalError('reviewImagesError');
+    clearModalError('reviewSubmitError');
+    const button = document.getElementById('submitReviewButton');
+    if (button) button.disabled = false;
+}
+
+function attachReturnImageHandlers() {
+    const input = document.getElementById('returnImages');
+    if (!input) return;
+    input.onchange = () => {
+        const files = Array.from(input.files || []);
+        const previewContainer = document.getElementById('returnImagesPreview');
+        previewContainer.innerHTML = '';
+        activeReturnFiles = [];
+        if (files.length > 3) {
+            setModalError('returnImagesError', 'Please upload no more than 3 images.');
+            return;
+        }
+        for (const file of files) {
+            if (!['image/jpeg','image/png','image/webp'].includes(file.type)) {
+                setModalError('returnImagesError', 'Images must be JPEG, PNG, or WebP.');
+                continue;
+            }
+            if (file.size > 5 * 1024 * 1024) {
+                setModalError('returnImagesError', 'Each image must be 5MB or smaller.');
+                continue;
+            }
+            activeReturnFiles.push(file);
+            const preview = document.createElement('div');
+            preview.className = 'thumb-preview';
+            const img = document.createElement('img');
+            img.src = URL.createObjectURL(file);
+            preview.appendChild(img);
+            previewContainer.appendChild(preview);
+        }
+    };
+}
+
+function attachReviewImageHandlers() {
+    const input = document.getElementById('reviewImages');
+    if (!input) return;
+    input.onchange = () => {
+        const files = Array.from(input.files || []);
+        const previewContainer = document.getElementById('reviewImagesPreview');
+        previewContainer.innerHTML = '';
+        activeReviewFiles = [];
+        if (files.length > 3) {
+            setModalError('reviewImagesError', 'Please upload no more than 3 images.');
+            return;
+        }
+        for (const file of files) {
+            if (!['image/jpeg','image/png','image/webp'].includes(file.type)) {
+                setModalError('reviewImagesError', 'Images must be JPEG, PNG, or WebP.');
+                continue;
+            }
+            if (file.size > 5 * 1024 * 1024) {
+                setModalError('reviewImagesError', 'Each image must be 5MB or smaller.');
+                continue;
+            }
+            activeReviewFiles.push(file);
+            const preview = document.createElement('div');
+            preview.className = 'thumb-preview';
+            const img = document.createElement('img');
+            img.src = URL.createObjectURL(file);
+            preview.appendChild(img);
+            previewContainer.appendChild(preview);
+        }
+    };
+}
+
+function buildReviewStars() {
+    const starContainer = document.getElementById('reviewStars');
+    if (!starContainer) return;
+    starContainer.innerHTML = '';
+    for (let i = 1; i <= 5; i++) {
+        const star = document.createElement('span');
+        star.className = `star${i <= selectedRating ? ' selected' : ''}`;
+        star.innerHTML = '★';
+        star.title = `${i} star${i > 1 ? 's' : ''}`;
+        star.dataset.value = i;
+        star.addEventListener('mouseover', () => highlightStars(i));
+        star.addEventListener('mouseout', () => highlightStars(selectedRating));
+        star.addEventListener('click', () => {
+            selectedRating = i;
+            highlightStars(i);
+        });
+        starContainer.appendChild(star);
+    }
+}
+
+function highlightStars(value) {
+    document.querySelectorAll('#reviewStars .star').forEach(star => {
+        const score = Number(star.dataset.value || 0);
+        star.classList.toggle('hover', score <= value);
+        star.classList.toggle('selected', score <= selectedRating);
+    });
+}
+
+function openReviewModal(orderId, itemId) {
+    activeReviewOrderId = orderId;
+    activeReviewItemId = itemId;
+    resetReviewModal();
+    const order = findOrder(orderId);
+    if (!order) {
+        showToast('Order data is unavailable.', true);
+        return;
+    }
+    const item = (order.items || []).find(i => (i.order_item_id || i.id || '') === itemId);
+    if (!item) {
+        showToast('Item data is unavailable.', true);
+        return;
+    }
+    const productName = safeText(item.product_name || item.name || 'Product');
+    const variantLabel = safeText(item.variant_label || item.variant || '');
+    const imageUrl = item.image ? safeText(item.image) : '';
+    document.getElementById('reviewProductInfo').innerHTML = `
+        <div style="display:flex;gap:14px;align-items:center;">
+            <div style="width:72px;height:72px;border-radius:18px;overflow:hidden;border:1px solid #e8e8f0;background:#f8f9fa;">
+                ${imageUrl ? `<img src="${imageUrl}" alt="${productName}" style="width:100%;height:100%;object-fit:cover;" />` : `<div style="width:100%;height:100%;display:flex;align-items:center;justify-content:center;color:#adb5bd;font-size:18px">?</div>`}
             </div>
-            ${status !== 'cancelled' ? progressHtml(status) : ''}
-            <div class="ord-footer">
-                <div class="ord-total">Total: <span>₱${Number(total).toLocaleString('en-PH',{minimumFractionDigits:2})}</span></div>
-                <div class="ord-actions">
-                    ${status === 'pending' ? `<button class="ord-btn-cancel" onclick="cancelOrder('${orderId}')">Cancel</button>` : ''}
-                    <a href="/buyer/order_summary?id=${orderId}" class="ord-btn-view">View Details</a>
-                </div>
+            <div>
+                <div style="font-size:14px;font-weight:700;color:#1a1a3e;margin-bottom:8px">${productName}</div>
+                ${variantLabel ? `<div style="font-size:13px;color:#6c757d">${variantLabel}</div>` : ''}
             </div>
         </div>`;
-    }).join('');
+    buildReviewStars();
+    openModal('reviewModal');
 }
 
-async function cancelOrder(orderId) {
-    if (!confirm('Cancel this order?')) return;
-    const res = await fetch(`/buyer/api/orders/${orderId}/cancel`, {
-        method: 'POST',
-        headers: { 'X-CSRF-Token': CSRF() }
-    }).then(r => r.json()).catch(() => ({ success: false }));
-    if (res.success) { showToast('Order cancelled.'); initOrdersPage(); }
-    else showToast(res.error || 'Failed to cancel.', true);
+async function submitReturnRequest() {
+    if (!activeReturnOrderId) return;
+    const order = findOrder(activeReturnOrderId);
+    if (!order) {
+        showToast('Order data is unavailable.', true);
+        return;
+    }
+    clearModalError('returnItemsError');
+    clearModalError('returnReasonError');
+    clearModalError('returnPolicyError');
+    clearModalError('returnImagesError');
+    clearModalError('returnRequestError');
+
+    const selectedInputs = Array.from(document.querySelectorAll('#returnItemsContainer input[data-return-item]'));
+    const selected = selectedInputs.filter(input => input.checked).map(input => {
+        const itemId = input.dataset.returnItem;
+        const qtyInput = document.getElementById(`returnQty_${itemId}`);
+        return { itemId, quantity: Number(qtyInput?.value || 0) };
+    });
+    if (!selected.length) {
+        setModalError('returnItemsError', 'Select at least one item to return.');
+        return;
+    }
+    if (selected.some(item => item.quantity < 1)) {
+        setModalError('returnItemsError', 'Return quantity must be at least 1.');
+        return;
+    }
+    const reason = document.getElementById('returnReason').value;
+    if (!reason) {
+        setModalError('returnReasonError', 'Select a reason for the return.');
+        return;
+    }
+    if (!document.getElementById('returnConfirmPolicy').checked) {
+        setModalError('returnPolicyError', 'You must agree to the return/refund policy.');
+        return;
+    }
+
+    const formData = new FormData();
+    const key = createIdempotencyKey(`return-${activeReturnOrderId}`);
+    formData.append('idempotency_key', key);
+    formData.append('reason', reason);
+    formData.append('description', document.getElementById('returnDescription').value || '');
+    selected.forEach((item, index) => {
+        formData.append(`items[${index}][order_item_id]`, item.itemId);
+        formData.append(`items[${index}][quantity]`, item.quantity);
+    });
+    activeReturnFiles.forEach((file, index) => {
+        formData.append(`images[${index}]`, file);
+    });
+
+    const button = document.getElementById('submitReturnButton');
+    if (button) { button.disabled = true; button.textContent = 'Submitting…'; }
+    try {
+        const res = await fetch(`/buyer/api/orders/${encodeURIComponent(activeReturnOrderId)}/return_request`, {
+            method: 'POST',
+            headers: {
+                'X-CSRF-Token': CSRF(),
+                'Idempotency-Key': key
+            },
+            body: formData
+        }).then(r => r.json());
+        if (res && res.success) {
+            showToast('Return request submitted successfully.');
+            closeModal('returnModal');
+            removeIdempotencyKey(`return-${activeReturnOrderId}`);
+            await refreshOrders();
+            return;
+        }
+        setModalError('returnRequestError', res.error || 'Failed to submit return request.');
+    } catch (err) {
+        setModalError('returnRequestError', 'A network error occurred. Please try again.');
+    } finally {
+        if (button) { button.disabled = false; button.textContent = 'Submit Return Request'; }
+    }
 }
 
-document.addEventListener('DOMContentLoaded', () => { initOrdersPage(); updateCartBadge(); });
+async function submitReview() {
+    if (!activeReviewOrderId || !activeReviewItemId) return;
+    clearModalError('reviewRatingError');
+    clearModalError('reviewImagesError');
+    clearModalError('reviewSubmitError');
+    if (!selectedRating) {
+        setModalError('reviewRatingError', 'Select a rating to submit your review.');
+        return;
+    }
+
+    const formData = new FormData();
+    const key = createIdempotencyKey(`review-${activeReviewOrderId}-${activeReviewItemId}`);
+    formData.append('idempotency_key', key);
+    formData.append('order_item_id', activeReviewItemId);
+    formData.append('rating', selectedRating);
+    formData.append('comment', document.getElementById('reviewText').value || '');
+    activeReviewFiles.forEach((file, index) => {
+        formData.append(`images[${index}]`, file);
+    });
+
+    const button = document.getElementById('submitReviewButton');
+    if (button) { button.disabled = true; button.textContent = 'Submitting…'; }
+    try {
+        const res = await fetch(`/buyer/api/orders/${encodeURIComponent(activeReviewOrderId)}/review`, {
+            method: 'POST',
+            headers: {
+                'X-CSRF-Token': CSRF(),
+                'Idempotency-Key': key
+            },
+            body: formData
+        }).then(r => r.json());
+        if (res && res.success) {
+            showToast('Thank you! Your review was submitted.');
+            closeModal('reviewModal');
+            removeIdempotencyKey(`review-${activeReviewOrderId}-${activeReviewItemId}`);
+            await refreshOrders();
+            return;
+        }
+        setModalError('reviewSubmitError', res.error || 'Failed to submit review.');
+    } catch (err) {
+        setModalError('reviewSubmitError', 'A network error occurred. Please try again.');
+    } finally {
+        if (button) { button.disabled = false; button.textContent = 'Submit Review'; }
+    }
+}
+
+async function refreshOrders() {
+    const response = await API.buyer.getOrders().catch(() => null);
+    allOrders = Array.isArray(response?.orders) ? response.orders
+              : Array.isArray(response)          ? response
+              : allOrders;
+    applyFilter();
+}
+
+function initFileInputs() {
+    attachReturnImageHandlers();
+    attachReviewImageHandlers();
+}
+
+window.addEventListener('DOMContentLoaded', async () => {
+    await initOrdersPage();
+    initFileInputs();
+});
 </script>
 </body>
 </html>

@@ -3,6 +3,36 @@
  * Responses are automatically unwrapped from {success, data, error} envelope.
  */
 
+// ── Logout confirmation (wired to all logout links on every page) ──
+document.addEventListener('DOMContentLoaded', () => {
+    document.querySelectorAll('a.logout-link, a[href="/logout"]').forEach(link => {
+        link.addEventListener('click', e => {
+            e.preventDefault();
+            const href = link.href || '/logout';
+            if (document.getElementById('_logoutModal')) return;
+            const overlay = document.createElement('div');
+            overlay.id = '_logoutModal';
+            overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:9999;display:flex;align-items:center;justify-content:center;padding:16px';
+            overlay.innerHTML = `
+                <div style="background:#fff;border-radius:18px;padding:28px 24px;width:100%;max-width:340px;text-align:center;box-shadow:0 20px 60px rgba(0,0,0,.18);animation:_lci .2s ease">
+                    <div style="font-size:44px;margin-bottom:12px">🚪</div>
+                    <div style="font-size:18px;font-weight:700;color:#1a1a3e;margin-bottom:8px">Log out?</div>
+                    <div style="font-size:14px;color:#6c757d;margin-bottom:24px">Are you sure you want to log out?</div>
+                    <div style="display:flex;gap:10px">
+                        <button id="_logoutCancel" style="flex:1;padding:11px;border-radius:10px;border:1.5px solid #e8e8f0;background:#fff;font-size:14px;font-weight:600;color:#1a1a3e;cursor:pointer">Cancel</button>
+                        <button id="_logoutConfirm" style="flex:1;padding:11px;border-radius:10px;border:none;background:linear-gradient(135deg,#FF2BAC,#FF6BCE);color:#fff;font-size:14px;font-weight:600;cursor:pointer">Yes, Log out</button>
+                    </div>
+                </div>
+                <style>@keyframes _lci{from{transform:scale(.92);opacity:0}to{transform:scale(1);opacity:1}}</style>
+            `;
+            document.body.appendChild(overlay);
+            document.getElementById('_logoutCancel').onclick  = () => overlay.remove();
+            document.getElementById('_logoutConfirm').onclick = () => { window.location.href = href; };
+            overlay.addEventListener('click', ev => { if (ev.target === overlay) overlay.remove(); });
+        });
+    });
+});
+
 function _csrfToken() {
     return document.querySelector('meta[name="csrf-token"]')?.content || '';
 }
@@ -108,10 +138,20 @@ const API = {
     rider: {
         getDeliveries:  ()           => _get('/rider/api/deliveries'),
         acceptDelivery: (id)         => _post(`/rider/api/deliveries/${encodeURIComponent(id)}/accept`, {}),
+        declineDelivery:(id, reason, note) => _post(`/rider/api/deliveries/${encodeURIComponent(id)}/decline`, { reason, note }),
+        reportIssue:    (id, reason, note) => _post(`/rider/api/deliveries/${encodeURIComponent(id)}/report`, { reason, note }),
         updateStatus:   (id, status) => _post(`/rider/api/deliveries/${encodeURIComponent(id)}/status`, { status }),
         getLocations:   (id)         => _get(`/rider/api/deliveries/${encodeURIComponent(id)}/locations`),
         getDashboard:   ()           => _get('/rider/api/dashboard'),
         getEarnings:    ()           => _get('/rider/api/earnings'),
+        getAvailability:()           => _get('/rider/api/availability'),
+        setAvailability:(val)        => _post('/rider/api/availability', { is_available: val }),
+        getPerformance: ()           => _get('/rider/api/performance'),
+        getNotifications:()          => _get('/rider/api/notifications'),
+        markNotifsRead: ()           => _post('/rider/api/notifications/read-all', {}),
+        getProfile:     ()           => _get('/rider/api/profile'),
+        saveProfile:    (data)       => _post('/rider/api/profile', data),
+        getDeclineReasons: ()        => _get('/rider/api/decline-reasons'),
     },
 
     shop: {

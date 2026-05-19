@@ -35,9 +35,13 @@ document.getElementById('loginForm').addEventListener('submit', async (e) => {
 
     const res  = await fetch('/login', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        headers: {
+            'Accept': 'application/json',
+            'Content-Type': 'application/json'
+        },
         body: JSON.stringify({
-            email:    document.getElementById('email').value,
+            email:    document.getElementById('email').value.trim(),
             password: document.getElementById('password').value,
             'g-recaptcha-response': captchaResponse
         }),
@@ -46,7 +50,33 @@ document.getElementById('loginForm').addEventListener('submit', async (e) => {
     const data = await res.json();
 
     if (res.ok) {
-        const redirectUrl = data.redirect || '/';
+        // Check for Buy Now intent in sessionStorage
+        const buyNowIntent = sessionStorage.getItem('buy_now_intent');
+        let redirectUrl = data.redirect || '/';
+        
+        // Check URL parameter for return_to
+        const urlParams = new URLSearchParams(window.location.search);
+        const returnTo = urlParams.get('return_to');
+        
+        if (returnTo === 'buy_now' && buyNowIntent) {
+            // Restore Buy Now intent and redirect to product page to complete purchase
+            try {
+                const intent = JSON.parse(buyNowIntent);
+                // Store in server session via API
+                await fetch('/buyer/api/buy-now', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(intent)
+                });
+                sessionStorage.removeItem('buy_now_intent');
+                redirectUrl = '/buyer/checkout?mode=buy_now';
+            } catch (err) {
+                console.error('Failed to restore buy now intent:', err);
+            }
+        } else if (returnTo && returnTo.startsWith('/')) {
+            redirectUrl = returnTo;
+        }
+        
         let countdown = 3;
         
         // Update popup to show countdown

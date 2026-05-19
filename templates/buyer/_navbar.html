@@ -188,7 +188,7 @@
   }
 </style>
 
-<nav class="gn-bar">
+<nav class="gn-bar" {% if user %}data-user-id="{{ user.id }}"{% endif %}>
   <div class="container gn-inner">
 
     <a href="/" class="gn-brand">
@@ -361,8 +361,9 @@
       notifList.innerHTML = '<div class="gn-notif-empty">Loading...</div>';
       
       fetch('/buyer/api/notifications?limit=5')
-        .then(function(r) { return r.ok ? r.json() : []; })
-        .then(function(notifications) {
+        .then(function(r) { return r.ok ? r.json() : null; })
+        .then(function(json) {
+          var notifications = (json && json.data && Array.isArray(json.data.notifications)) ? json.data.notifications : [];
           if (!notifications.length) {
             notifList.innerHTML = '<div class="gn-notif-empty">No notifications yet</div>';
             return;
@@ -375,7 +376,9 @@
             
             var timeAgo = getTimeAgo(n.created_at);
             
-            return '<div class="gn-notif-item ' + (n.is_read ? '' : 'unread') + '" onclick="handleNotifClick(\'' + n.id + '\')">' +
+            var actionUrl = n.action_url || '/buyer/notifications';
+            actionUrl = actionUrl.replace(/'/g, "\\'");
+            return '<div class="gn-notif-item ' + (n.is_read ? '' : 'unread') + '" onclick="handleNotifClick(\'' + n.id + '\', \'' + actionUrl + '\')">' +
               imageHtml +
               '<div class="gn-notif-content">' +
                 '<div class="gn-notif-title">' + (n.title || 'Notification') + '</div>' +
@@ -406,8 +409,8 @@
       return Math.floor(diffMins / 1440) + 'd ago';
     }
     
-    window.handleNotifClick = function(notifId) {
-      // Mark as read and redirect
+    window.handleNotifClick = function(notifId, actionUrl) {
+      // Mark as read and redirect to the notification's action URL
       fetch('/buyer/api/notifications/' + notifId + '/read', {
         method: 'POST',
         headers: {
@@ -415,11 +418,9 @@
           'X-CSRF-Token': document.querySelector('meta[name="csrf-token"]')?.content || ''
         }
       }).then(function() {
-        // Redirect to notifications page
-        window.location.href = '/buyer/notifications';
+        window.location.href = actionUrl || '/buyer/notifications';
       }).catch(function() {
-        // Still redirect even if marking as read fails
-        window.location.href = '/buyer/notifications';
+        window.location.href = actionUrl || '/buyer/notifications';
       });
     };
   }

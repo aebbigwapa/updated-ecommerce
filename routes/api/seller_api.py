@@ -113,6 +113,22 @@ def seller_delete_product(product_id):
         return api_error(f'Failed: {e}', status=500)
 
 
+@seller_api_bp.get('/seller/<uuid:seller_id>/store-name')
+def seller_store_name(seller_id):
+    """Public: get a seller's store name for chat display."""
+    try:
+        from supabase import create_client
+        import os
+        sb = create_client(os.getenv('SUPABASE_URL'), os.getenv('SUPABASE_SERVICE_ROLE_KEY'))
+        res = sb.table('applications').select('store_name') \
+            .eq('user_id', str(seller_id)).eq('role', 'seller').limit(1).execute()
+        if res.data:
+            return api_response(data={'store_name': res.data[0].get('store_name', '')}, message='OK')
+        return api_error('Seller not found', status=404)
+    except Exception as e:
+        return api_error(str(e), status=500)
+
+
 @seller_api_bp.get('/seller/category')
 @role_required('seller')
 def seller_category():
@@ -137,10 +153,12 @@ def seller_orders():
         result = []
         for o in orders:
             s = serialize_order(o)
-            # Preserve seller-specific fields not in serialize_order
-            s['customer_name'] = o.get('customer_name', '')
-            s['items_count']   = o.get('items_count', 0)
-            s['total_amount']  = o.get('total_amount', 0)
+            s['customer_name']          = o.get('customer_name', '')
+            s['items_count']            = o.get('items_count', 0)
+            s['total_amount']           = o.get('total_amount', 0)
+            s['buyer_id']               = o.get('buyer_id', '')
+            s['proof_of_delivery_url']  = o.get('proof_of_delivery_url') or ''
+            s['proof_uploaded_at']      = o.get('proof_uploaded_at') or ''
             result.append(s)
         return api_response(
             data={'orders': result, 'count': len(result)},
@@ -162,6 +180,20 @@ def seller_update_order_status(order_id):
         updated = OrderModel().update_status_for_seller(str(order_id), seller_id, status)
         if not updated:
             return api_error('Order not found or invalid transition', status=404)
+        # Auto-create conversation based on new status
+        try:
+            from models.message_model import MessageModel
+            buyer_id  = updated.get('buyer_id')
+            rider_id  = updated.get('rider_id')
+            MessageModel().ensure_order_conversations(
+                order_id=str(order_id),
+                status=status,
+                buyer_id=buyer_id,
+                seller_id=seller_id,
+                rider_id=rider_id,
+            )
+        except Exception as e:
+            print(f'[seller_update_order_status] chat creation error: {e}')
         return api_response(message='Status updated', status=200)
     except Exception as e:
         return api_error(f'Failed: {e}', status=500)

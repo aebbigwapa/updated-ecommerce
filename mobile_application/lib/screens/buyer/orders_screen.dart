@@ -393,10 +393,11 @@ class _OrdersScreenState extends State<OrdersScreen> {
     final status = order['status']?.toString() ?? 'pending';
     final items = (order['items'] as List<dynamic>?) ?? [];
     final totalAmount = (order['total_price'] as num?)?.toDouble() ?? 0.0;
-    // Fix: backend sends shipping_address, not delivery_address
     final address = order['shipping_address']?.toString() ?? order['delivery_address']?.toString() ?? '—';
     final paymentMethod = (order['payment_method'] ?? 'cod').toString().toUpperCase().replaceAll('_', ' ');
     final notes = order['notes']?.toString() ?? '';
+    final proofUrl = order['proof_of_delivery_url']?.toString() ?? '';
+    final proofUploadedAt = order['proof_uploaded_at']?.toString() ?? '';
 
     showModalBottomSheet(
       context: context,
@@ -448,7 +449,6 @@ class _OrdersScreenState extends State<OrdersScreen> {
               return Padding(
                 padding: const EdgeInsets.only(bottom: 12),
                 child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                  // Product image
                   Container(
                     width: 56, height: 56,
                     margin: const EdgeInsets.only(right: 10),
@@ -495,10 +495,100 @@ class _OrdersScreenState extends State<OrdersScreen> {
               Text('₱${totalAmount.toStringAsFixed(2)}',
                   style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w700, color: AppTheme.primaryLight)),
             ]),
+            // Proof of Delivery
+            if (proofUrl.isNotEmpty) ...[
+              const SizedBox(height: 16),
+              GestureDetector(
+                onTap: () => _showProofViewer(proofUrl, proofUploadedAt),
+                child: Container(
+                  padding: const EdgeInsets.all(14),
+                  decoration: BoxDecoration(
+                    color: Colors.green.shade50,
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: Colors.green.shade200),
+                  ),
+                  child: Row(children: [
+                    Container(
+                      width: 40, height: 40,
+                      decoration: BoxDecoration(
+                        color: Colors.green.shade100,
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: const Icon(Icons.camera_alt_outlined, color: Colors.green, size: 20),
+                    ),
+                    const SizedBox(width: 12),
+                    const Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                      Text('Proof of Delivery', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: Colors.green)),
+                      Text('Tap to view photo taken by rider', style: TextStyle(fontSize: 11, color: Colors.green)),
+                    ])),
+                    const Icon(Icons.chevron_right, color: Colors.green),
+                  ]),
+                ),
+              ),
+            ],
+            const SizedBox(height: 16),
           ]),
         ),
       ),
     );
+  }
+
+  void _showProofViewer(String proofUrl, String uploadedAt) {
+    Navigator.push(context, MaterialPageRoute(
+      builder: (_) => Scaffold(
+        backgroundColor: Colors.black,
+        appBar: AppBar(
+          backgroundColor: Colors.black,
+          foregroundColor: Colors.white,
+          title: const Text('Proof of Delivery', style: TextStyle(fontSize: 16)),
+          actions: [
+            IconButton(
+              icon: const Icon(Icons.open_in_new),
+              tooltip: 'Open full image',
+              onPressed: () async {
+                // just show a snackbar since url_launcher may not be configured
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(content: Text(proofUrl), duration: const Duration(seconds: 4)),
+                );
+              },
+            ),
+          ],
+        ),
+        body: Column(children: [
+          Expanded(
+            child: InteractiveViewer(
+              minScale: 0.5,
+              maxScale: 4.0,
+              child: Center(
+                child: Image.network(
+                  proofUrl,
+                  fit: BoxFit.contain,
+                  loadingBuilder: (_, child, progress) => progress == null
+                      ? child
+                      : const Center(child: CircularProgressIndicator(color: Colors.white)),
+                  errorBuilder: (_, __, ___) => const Column(mainAxisAlignment: MainAxisAlignment.center, children: [
+                    Icon(Icons.broken_image_outlined, color: Colors.white54, size: 64),
+                    SizedBox(height: 12),
+                    Text('Could not load image', style: TextStyle(color: Colors.white54)),
+                  ]),
+                ),
+              ),
+            ),
+          ),
+          if (uploadedAt.isNotEmpty)
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(12),
+              color: Colors.black87,
+              child: Text(
+                'Uploaded: ${_formatDate(uploadedAt)}',
+                style: const TextStyle(color: Colors.white60, fontSize: 12),
+                textAlign: TextAlign.center,
+              ),
+            ),
+        ]),
+      ),
+    ));
   }
 
   Widget _detailRow(String label, String value) => Padding(

@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../../theme/app_theme.dart';
 import '../../services/api_service.dart';
 import '../../services/realtime_service.dart';
@@ -48,10 +49,9 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
   }
 
   Future<void> _load() async {
-    final user = await ApiService.getCurrentUser();
-    if (user != null && mounted) {
-      setState(() => _name = user['first_name'] ?? '');
-    }
+    final prefs = await SharedPreferences.getInstance();
+    final firstName = prefs.getString('user_first_name') ?? '';
+    if (mounted) setState(() => _name = firstName);
     await _loadData();
   }
 

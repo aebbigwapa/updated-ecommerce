@@ -288,30 +288,85 @@ function placeMarker(lat, lng, ids, soft = false) {
 }
 
 // ── Reverse geocode → fill dropdowns ─────────────────────────
+let _reverseGeocodeTimeout = null;
+let _lastReverseGeocode = 0;
+const REVERSE_GEOCODE_DEBOUNCE = 500; // ms
+const NOMINATIM_RATE_LIMIT = 1000; // 1 request per second
+
 async function reverseGeocode(lat, lng, ids) {
-    try {
-        const res  = await fetch(`${NOMINATIM_BASE}/reverse?lat=${lat}&lon=${lng}&format=json&zoom=18&addressdetails=1`);
-        const data = await res.json();
-        const addr = data.address || {};
-
-        // Street
-        const streetEl = getEl(ids.street);
-        if (streetEl) {
-            const parts = [addr.house_number, addr.road].filter(Boolean);
-            if (parts.length) streetEl.value = parts.join(' ');
-        }
-
-        // ZIP
-        const zipEl = getEl(ids.zip);
-        if (zipEl && addr.postcode) zipEl.value = addr.postcode;
-
-        // Dropdowns
-        await syncDropdownsFromAddress(addr, ids);
-
-        setInstruction('Address filled. Please verify and adjust if needed.');
-    } catch (e) {
-        console.warn('Reverse geocode failed', e);
+    // Debounce: clear pending timeout
+    if (_reverseGeocodeTimeout) {
+        clearTimeout(_reverseGeocodeTimeout);
     }
+
+    // Rate limiting: ensure 1 second between requests
+    const now = Date.now();
+    const timeSinceLastRequest = now - _lastReverseGeocode;
+    const waitTime = Math.max(0, NOMINATIM_RATE_LIMIT - timeSinceLastRequest);
+
+    _reverseGeocodeTimeout = setTimeout(async () => {
+        _lastReverseGeocode = Date.now();
+        
+        // Show loading state
+        setInstruction('🔄 Fetching address from coordinates...');
+        const streetEl = getEl(ids.street);
+        const zipEl = getEl(ids.zip);
+        if (streetEl) streetEl.disabled = true;
+        if (zipEl) zipEl.disabled = true;
+        
+        try {
+            const res  = await fetch(
+                `${NOMINATIM_BASE}/reverse?lat=${lat}&lon=${lng}&format=json&zoom=18&addressdetails=1`,
+                {
+                    headers: {
+                        'User-Agent': 'Grande-ECommerce-Registration/1.0'
+                    }
+                }
+            );
+            
+            if (!res.ok) {
+                throw new Error(`Nominatim returned ${res.status}`);
+            }
+            
+            const data = await res.json();
+            const addr = data.address || {};
+
+            // Street
+            if (streetEl) {
+                const parts = [addr.house_number, addr.road].filter(Boolean);
+                if (parts.length) {
+                    streetEl.value = parts.join(' ');
+                    // Brief highlight to show it was filled
+                    streetEl.style.background = '#e0ffe8';
+                    setTimeout(() => { streetEl.style.background = ''; }, 1500);
+                }
+            }
+
+            // ZIP
+            if (zipEl && addr.postcode) {
+                zipEl.value = addr.postcode;
+                zipEl.style.background = '#e0ffe8';
+                setTimeout(() => { zipEl.style.background = ''; }, 1500);
+            }
+
+            // Dropdowns
+            await syncDropdownsFromAddress(addr, ids);
+
+            setInstruction('✅ Address auto-filled! Please verify and adjust if needed.');
+            
+            // Show success toast
+            showAutoFillSuccess();
+            
+        } catch (e) {
+            console.warn('Reverse geocode failed', e);
+            setInstruction('⚠️ Could not determine address. Please fill manually.');
+            showAutoFillError();
+        } finally {
+            // Re-enable fields
+            if (streetEl) streetEl.disabled = false;
+            if (zipEl) zipEl.disabled = false;
+        }
+    }, waitTime + REVERSE_GEOCODE_DEBOUNCE);
 }
 
 // ── Match Nominatim address → PSGC dropdowns ─────────────────
@@ -549,4 +604,23 @@ function getPSGCValues(ids = {}) {
         latitude:  getVal(ids.latitude   || 'addrLatitude')  || null,
         longitude: getVal(ids.longitude  || 'addrLongitude') || null,
     };
+}
+
+// ── User feedback helpers ──────────────────────────────────────────────
+function showAutoFillSuccess() {
+    const successEl = document.getElementById('successMsg');
+    if (successEl) {
+        successEl.textContent = '✅ Address auto-filled from map location!';
+        successEl.style.display = 'block';
+        setTimeout(() => { successEl.style.display = 'none'; }, 4000);
+    }
+}
+
+function showAutoFillError() {
+    const errorEl = document.getElementById('errorMsg');
+    if (errorEl) {
+        errorEl.textContent = '⚠️ Could not determine address from this location. Please fill manually.';
+        errorEl.style.display = 'block';
+        setTimeout(() => { errorEl.style.display = 'none'; }, 5000);
+    }
 }

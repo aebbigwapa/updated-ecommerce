@@ -4,6 +4,7 @@ from models.application_model import ApplicationModel
 from services.auth_service import AuthService
 from services.product_service import ProductService
 from services.file_upload_service import FileUploadService
+from routes.api.api_helpers import api_response, api_error, serialize_order
 
 def seller_required(f):
     from functools import wraps
@@ -416,6 +417,17 @@ def api_seller_orders():
         order['buyer_id'] = order.get('buyer_id')
     return jsonify(orders)
 
+@seller_bp.route('/api/shipping', methods=['GET'])
+@seller_required
+def api_seller_shipping():
+    seller_id = session['user']['id']
+    from models.order_model import OrderModel
+    order_model = OrderModel()
+    orders = order_model.get_by_seller(seller_id)
+    shipping_statuses = ['processing', 'ready_for_pickup', 'in_transit', 'delivered']
+    filtered_orders = [o for o in orders if o.get('status') in shipping_statuses]
+    return jsonify(filtered_orders)
+
 @seller_bp.route('/api/orders/<order_id>/status', methods=['POST'])
 @seller_required
 def api_seller_update_order_status(order_id):
@@ -446,12 +458,17 @@ def api_seller_update_order_status(order_id):
         buyer_id = current_order.get('buyer_id')
         if buyer_id:
             try:
-                notification_model.create_order_notification(
+                notification_model.create(
                     user_id=buyer_id,
-                    order_id=order_id,
-                    title="Order Approved",
-                    message="Your order has been accepted by the seller and is now being processed.",
-                    action_url=f"/buyer/orders#{order_id}"
+                    notif_type='status_update',
+                    title='Order Approved',
+                    message='Your order has been accepted by the seller and is now being processed.',
+                    action_url=f"/buyer/orders#{order_id}",
+                    data_payload={
+                        'order_id': order_id,
+                        'new_status': status,
+                        'timestamp': __import__('datetime').datetime.now(__import__('datetime').timezone.utc).isoformat()
+                    }
                 )
             except Exception as e:
                 print(f"Error creating notification: {e}")
@@ -477,6 +494,18 @@ def api_seller_earnings():
     stats = OrderModel().get_seller_stats(seller_id)
     return jsonify(stats)
 
+
+@seller_bp.route('/api/seller/<seller_id>/store-name', methods=['GET'])
+def api_get_seller_store_name(seller_id):
+    """Public endpoint to get seller's store name for chat display"""
+    try:
+        application = app_model.get_by_user_id(seller_id)
+        if application and application.get('store_name'):
+            return jsonify({'store_name': application['store_name']})
+        return jsonify({'store_name': None}), 404
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
 @seller_bp.route('/store')
 @seller_required
 def store():
@@ -487,4 +516,316 @@ def store():
 @seller_required
 def reviews():
     return render_template('seller/reviews.html')
+
+
+# ============================================================================
+# CANCELLATION ENDPOINTS
+# ============================================================================
+
+@seller_bp.route('/api/orders/<order_id>/cancel', methods=['POST'])
+@seller_required
+def api_seller_cancel_order(order_id):
+    """Seller-initiated order cancellation"""
+    from models.order_model import OrderModel
+    from models.notification_model import NotificationModel
+    from datetime import datetime, timezone
+    
+    try:
+        seller_id = session['user']['id']
+        data = request.get_json() or {}
+        reason = (data.get('reason') or 'Cancelled by seller')[:200]
+        
+        order_model = OrderModel()
+        notification_model = NotificationModel()
+        
+        # Get order and verify seller owns it
+        order = order_model.get_by_id(order_id)
+        if not order:
+            return api_error('Order not found.', status=404)
+        
+        # Verify seller owns the products in this order
+        product_ids = order_model.supabase.table('order_items') \
+            .select('product_id').eq('order_id', order_id).execute()
+        if not product_ids.data:
+            return api_error('Order not found.', status=404)
+        
+        seller_product_ids = product_model.supabase.table('products') \
+            .select('id').eq('seller_id', seller_id).execute()
+        seller_ids = {p['id'] for p in (seller_product_ids.data or [])}
+        
+        order_product_ids = {p['product_id'] for p in product_ids.data}
+        if not order_product_ids.issubset(seller_ids):
+            return api_error('Not authorized to cancel this order.', status=403)
+        
+        # Check eligibility
+        eligibility = OrderModel.get_cancellation_eligibility(order, 'seller')
+        if not eligibility['canCancel']:
+            return api_error(eligibility['message'], status=400)
+        
+        # If already cancelled
+        if order.get('status') == 'cancelled':
+            return api_response(
+                data={'order': serialize_order(order)},
+                message='Order is already cancelled.',
+                status=200,
+            )
+        
+        now_iso = datetime.now(timezone.utc).isoformat()
+        
+        # Instant cancellation (seller doesn't need approval)
+        update_payload = {
+            'status': 'cancelled',
+            'cancelled_at': now_iso,
+            'cancel_reason': reason,
+        }
+        
+        updated = order_model.supabase.table('orders') \
+            .update(update_payload).eq('id', order_id).execute()
+        if not updated.data:
+            return api_error('Failed to cancel order.', status=500)
+        
+        # Restore stock
+        order_model.restore_order_stock(order_id)
+        
+        # Notify buyer
+        buyer_id = order.get('buyer_id')
+        if buyer_id:
+            notification_model.create(
+                buyer_id,
+                'status_update',
+                'Order Cancelled by Seller',
+                f'Your order #{order_id[:8].upper()} has been cancelled by the seller. Reason: {reason}',
+                f'/buyer/orders/{order_id}',
+                data_payload={'order_id': order_id, 'new_status': 'cancelled', 'reason': reason}
+            )
+        
+        return api_response(
+            data={'order': serialize_order(updated.data[0])},
+            message='Order cancelled successfully.',
+            status=200,
+        )
+    except Exception as e:
+        import traceback; traceback.print_exc()
+        return api_error(f'Failed to cancel order: {str(e)}', status=500)
+
+
+@seller_bp.route('/api/cancellation-requests/<request_id>/approve', methods=['POST'])
+@seller_required
+def api_approve_cancellation_request(request_id):
+    """Seller approves a buyer's cancellation request"""
+    from models.order_model import OrderModel
+    from models.notification_model import NotificationModel
+    from datetime import datetime, timezone
+    
+    try:
+        seller_id = session['user']['id']
+        data = request.get_json() or {}
+        approval_note = (data.get('note') or '')[:200]
+        
+        order_model = OrderModel()
+        notification_model = NotificationModel()
+        
+        # Get cancellation request
+        cancel_req = order_model.supabase.table('cancellation_requests') \
+            .select('*').eq('id', request_id).limit(1).execute()
+        if not cancel_req.data:
+            return api_error('Cancellation request not found.', status=404)
+        
+        req = cancel_req.data[0]
+        order_id = req.get('order_id')
+        buyer_id = req.get('requested_by')
+        
+        # Verify seller owns the order
+        order = order_model.get_by_id(order_id)
+        if not order:
+            return api_error('Order not found.', status=404)
+        
+        product_ids = order_model.supabase.table('order_items') \
+            .select('product_id').eq('order_id', order_id).execute()
+        if not product_ids.data:
+            return api_error('Order not found.', status=404)
+        
+        seller_product_ids = product_model.supabase.table('products') \
+            .select('id').eq('seller_id', seller_id).execute()
+        seller_ids = {p['id'] for p in (seller_product_ids.data or [])}
+        
+        order_product_ids = {p['product_id'] for p in product_ids.data}
+        if not order_product_ids.issubset(seller_ids):
+            return api_error('Not authorized.', status=403)
+        
+        if req.get('status') != 'pending':
+            return api_error('Cancellation request already processed.', status=400)
+        
+        now_iso = datetime.now(timezone.utc).isoformat()
+        
+        # Update cancellation request to approved
+        updated_req = order_model.supabase.table('cancellation_requests') \
+            .update({
+                'status': 'approved',
+                'approved_by': seller_id,
+                'approved_at': now_iso,
+            }).eq('id', request_id).execute()
+        
+        if not updated_req.data:
+            return api_error('Failed to approve cancellation request.', status=500)
+        
+        # Cancel the order
+        order_update = order_model.supabase.table('orders') \
+            .update({
+                'status': 'cancelled',
+                'cancelled_at': now_iso,
+                'cancel_reason': req.get('reason'),
+            }).eq('id', order_id).execute()
+        
+        if not order_update.data:
+            return api_error('Failed to cancel order.', status=500)
+        
+        # Restore stock
+        order_model.restore_order_stock(order_id)
+        
+        # Notify buyer
+        if buyer_id:
+            notification_model.create(
+                buyer_id,
+                'cancellation_approved',
+                'Cancellation Approved',
+                f'Your cancellation request for order #{order_id[:8].upper()} has been approved.',
+                f'/buyer/orders/{order_id}',
+                data_payload={'order_id': order_id}
+            )
+        
+        return api_response(
+            data={'request': updated_req.data[0]},
+            message='Cancellation request approved.',
+            status=200,
+        )
+    except Exception as e:
+        import traceback; traceback.print_exc()
+        return api_error(f'Failed to approve cancellation: {str(e)}', status=500)
+
+
+@seller_bp.route('/api/cancellation-requests/<request_id>/reject', methods=['POST'])
+@seller_required
+def api_reject_cancellation_request(request_id):
+    """Seller rejects a buyer's cancellation request"""
+    from models.order_model import OrderModel
+    from models.notification_model import NotificationModel
+    from datetime import datetime, timezone
+    
+    try:
+        seller_id = session['user']['id']
+        data = request.get_json() or {}
+        rejection_reason = (data.get('reason') or 'No reason provided')[:200]
+        
+        order_model = OrderModel()
+        notification_model = NotificationModel()
+        
+        # Get cancellation request
+        cancel_req = order_model.supabase.table('cancellation_requests') \
+            .select('*').eq('id', request_id).limit(1).execute()
+        if not cancel_req.data:
+            return api_error('Cancellation request not found.', status=404)
+        
+        req = cancel_req.data[0]
+        order_id = req.get('order_id')
+        buyer_id = req.get('requested_by')
+        
+        # Verify seller owns the order
+        order = order_model.get_by_id(order_id)
+        if not order:
+            return api_error('Order not found.', status=404)
+        
+        product_ids = order_model.supabase.table('order_items') \
+            .select('product_id').eq('order_id', order_id).execute()
+        if not product_ids.data:
+            return api_error('Order not found.', status=404)
+        
+        seller_product_ids = product_model.supabase.table('products') \
+            .select('id').eq('seller_id', seller_id).execute()
+        seller_ids = {p['id'] for p in (seller_product_ids.data or [])}
+        
+        order_product_ids = {p['product_id'] for p in product_ids.data}
+        if not order_product_ids.issubset(seller_ids):
+            return api_error('Not authorized.', status=403)
+        
+        if req.get('status') != 'pending':
+            return api_error('Cancellation request already processed.', status=400)
+        
+        now_iso = datetime.now(timezone.utc).isoformat()
+        
+        # Update cancellation request to rejected
+        updated_req = order_model.supabase.table('cancellation_requests') \
+            .update({
+                'status': 'rejected',
+                'rejected_reason': rejection_reason,
+                'approved_at': now_iso,
+            }).eq('id', request_id).execute()
+        
+        if not updated_req.data:
+            return api_error('Failed to reject cancellation request.', status=500)
+        
+        # Notify buyer
+        if buyer_id:
+            notification_model.create(
+                buyer_id,
+                'cancellation_rejected',
+                'Cancellation Rejected',
+                f'Your cancellation request for order #{order_id[:8].upper()} has been rejected. Reason: {rejection_reason}',
+                f'/buyer/orders/{order_id}',
+                data_payload={'order_id': order_id, 'reason': rejection_reason}
+            )
+        
+        return api_response(
+            data={'request': updated_req.data[0]},
+            message='Cancellation request rejected.',
+            status=200,
+        )
+    except Exception as e:
+        import traceback; traceback.print_exc()
+        return api_error(f'Failed to reject cancellation: {str(e)}', status=500)
+
+
+@seller_bp.route('/api/cancellation-requests', methods=['GET'])
+@seller_required
+def api_get_cancellation_requests():
+    """Get pending cancellation requests for seller"""
+    from models.order_model import OrderModel
+    
+    try:
+        seller_id = session['user']['id']
+        status = request.args.get('status', 'pending')  # pending, approved, rejected, all
+        
+        order_model = OrderModel()
+        
+        # Get all seller's product IDs
+        seller_products = product_model.supabase.table('products') \
+            .select('id').eq('seller_id', seller_id).execute()
+        seller_product_ids = [p['id'] for p in (seller_products.data or [])]
+        
+        if not seller_product_ids:
+            return api_response(data=[], message='No requests.', status=200)
+        
+        # Get cancellation requests for orders containing seller's products
+        if status == 'all':
+            requests = order_model.supabase.table('cancellation_requests') \
+                .select('*').execute()
+        else:
+            requests = order_model.supabase.table('cancellation_requests') \
+                .select('*').eq('status', status).execute()
+        
+        # Filter to only requests for seller's orders
+        filtered_requests = []
+        for req in (requests.data or []):
+            order_id = req.get('order_id')
+            order_items = order_model.supabase.table('order_items') \
+                .select('product_id').eq('order_id', order_id).execute()
+            
+            order_product_ids = {item['product_id'] for item in (order_items.data or [])}
+            if order_product_ids and order_product_ids.issubset(set(seller_product_ids)):
+                filtered_requests.append(req)
+        
+        return api_response(data=filtered_requests, message='OK', status=200)
+    except Exception as e:
+        import traceback; traceback.print_exc()
+        return api_error(f'Failed to get cancellation requests: {str(e)}', status=500)
 

@@ -98,11 +98,41 @@ _HASH_ITERATIONS = 260_000   # OWASP 2023 minimum for PBKDF2-SHA256
 
 
 def hash_password(plaintext: str) -> str:
-    return plaintext
+    if not isinstance(plaintext, str) or not plaintext:
+        raise ValueError('Password must be a non-empty string')
+    salt = secrets.token_bytes(16)
+    dk = hashlib.pbkdf2_hmac('sha256', plaintext.encode('utf-8'), salt, _HASH_ITERATIONS)
+    return f'pbkdf2_sha256${_HASH_ITERATIONS}${salt.hex()}${dk.hex()}'
 
 
 def verify_password(plaintext: str, stored: str) -> bool:
-    return plaintext == stored
+    if not isinstance(plaintext, str) or not isinstance(stored, str):
+        return False
+
+    # PBKDF2-SHA256 stored password format
+    if stored.startswith('pbkdf2_sha256$'):
+        parts = stored.split('$')
+        if len(parts) != 4:
+            return False
+        try:
+            iterations = int(parts[1])
+            salt = bytes.fromhex(parts[2])
+            expected_hash = bytes.fromhex(parts[3])
+        except (ValueError, TypeError):
+            return False
+        computed = hashlib.pbkdf2_hmac('sha256', plaintext.encode('utf-8'), salt, iterations)
+        return hmac.compare_digest(computed, expected_hash)
+
+    # bcrypt support for imported or external Supabase password hashes
+    if stored.startswith('$2a$') or stored.startswith('$2b$') or stored.startswith('$2y$'):
+        try:
+            import bcrypt
+            return bcrypt.checkpw(plaintext.encode('utf-8'), stored.encode('utf-8'))
+        except Exception:
+            return False
+
+    # Legacy plaintext fallback for old stored records.
+    return hmac.compare_digest(plaintext, stored)
 
 
 # ── Rate limiting (in-memory, per-IP and optional email) ────────────────────────
@@ -175,15 +205,18 @@ def _get_user_by_email(email):
     try:
         from models.user_model import UserModel
         return UserModel().get_by_email(email)
-    except Exception:
+    except (ImportError, AttributeError, ValueError):
         return None
 
 
 def _get_supabase_client():
     try:
         from supabase import create_client
+    except ImportError:
+        return None
+    try:
         return create_client(os.getenv('SUPABASE_URL'), os.getenv('SUPABASE_SERVICE_ROLE_KEY'))
-    except Exception:
+    except (TypeError, ValueError):
         return None
 
 
@@ -337,7 +370,7 @@ def configure_session(app):
         SESSION_COOKIE_HTTPONLY=True,
         SESSION_COOKIE_SAMESITE='Lax',
         SESSION_COOKIE_SECURE=os.getenv('FLASK_ENV', 'development') == 'production',
-        PERMANENT_SESSION_LIFETIME=3600,
+        PERMANENT_SESSION_LIFETIME=timedelta(hours=1),
     )
 
 
@@ -401,6 +434,7 @@ def log_account_locked(sb_client, identifier, ip_address, user_agent=None):
 
 import urllib.request
 import urllib.parse
+import urllib.error
 import json as _json
 
 
@@ -429,6 +463,10 @@ def verify_recaptcha(response_token):
             if result.get('success'):
                 return True, ''
             return False, 'CAPTCHA verification failed'
+    except urllib.error.URLError as e:
+        return False, f'CAPTCHA verification network error: {e.reason}'
+    except _json.JSONDecodeError:
+        return False, 'CAPTCHA verification returned invalid JSON'
     except Exception as e:
         return False, f'CAPTCHA verification error: {str(e)}'
 

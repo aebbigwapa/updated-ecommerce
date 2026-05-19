@@ -4,88 +4,69 @@ import '../theme/app_theme.dart';
 class CategoryGrid extends StatelessWidget {
   const CategoryGrid({super.key});
 
+  static const _categories = [
+    _Category('👗', 'Dresses & Skirts'),
+    _Category('👚', 'Tops & Blouses'),
+    _Category('🏃‍♀️', 'Activewear & Yoga Pants'),
+    _Category('👙', 'Lingerie & Sleepwear'),
+    _Category('🧥', 'Jackets & Coats'),
+    _Category('👠', 'Shoes & Accessories'),
+  ];
+
   @override
   Widget build(BuildContext context) {
-    final categories = [
-      Category(
-        emoji: '👗',
-        name: 'Dresses & Skirts',
-        description: 'Elegant dresses and skirts for every occasion',
-      ),
-      Category(
-        emoji: '👚',
-        name: 'Tops & Blouses',
-        description: 'Stylish tops and blouses for casual and formal wear',
-      ),
-      Category(
-        emoji: '🏃‍♀️',
-        name: 'Activewear & Yoga Pants',
-        description: 'Comfortable activewear for your fitness journey',
-      ),
-      Category(
-        emoji: '👙',
-        name: 'Lingerie & Sleepwear',
-        description: 'Intimate apparel and comfortable sleepwear',
-      ),
-      Category(
-        emoji: '🧥',
-        name: 'Jackets & Coats',
-        description: 'Warm and stylish outerwear for all seasons',
-      ),
-      Category(
-        emoji: '👠',
-        name: 'Shoes & Accessories',
-        description: 'Complete your look with shoes and accessories',
-      ),
-    ];
-
     return Container(
-      padding: const EdgeInsets.all(AppTheme.xl),
+      padding: const EdgeInsets.fromLTRB(
+        AppTheme.md, AppTheme.lg, AppTheme.md, AppTheme.lg,
+      ),
       color: AppTheme.white,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
+          const Text(
             'Shop by Category',
-            style: const TextStyle(
+            style: TextStyle(
               fontFamily: AppTheme.fontDisplay,
-              fontSize: 32,
+              fontSize: 22,
               fontWeight: FontWeight.w600,
               color: AppTheme.textDark,
             ),
           ),
-          const SizedBox(height: AppTheme.lg),
+          const SizedBox(height: AppTheme.md),
           GridView.builder(
             shrinkWrap: true,
             physics: const NeverScrollableScrollPhysics(),
             gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
               crossAxisCount: 3,
-              crossAxisSpacing: AppTheme.md,
-              mainAxisSpacing: AppTheme.md,
-              mainAxisExtent: 110,
+              crossAxisSpacing: AppTheme.sm,
+              mainAxisSpacing: AppTheme.sm,
+              // Let height be driven by width — square-ish cards
+              childAspectRatio: 1.0,
             ),
-            itemCount: categories.length,
-            itemBuilder: (context, index) {
-              final category = categories[index];
-              return _buildCategoryCard(context, category);
-            },
+            itemCount: _categories.length,
+            itemBuilder: (context, index) =>
+                _CategoryCard(category: _categories[index]),
           ),
         ],
       ),
     );
   }
+}
 
-  Widget _buildCategoryCard(BuildContext context, Category category) {
+class _CategoryCard extends StatelessWidget {
+  final _Category category;
+  const _CategoryCard({required this.category});
+
+  @override
+  Widget build(BuildContext context) {
     return GestureDetector(
-      onTap: () {
-        Navigator.pushNamed(
-          context,
-          '/shop',
-          arguments: category.name,
-        );
-      },
+      onTap: () => Navigator.pushNamed(
+        context,
+        '/shop',
+        arguments: category.name,
+      ),
       child: Container(
-        padding: const EdgeInsets.all(AppTheme.md),
+        padding: const EdgeInsets.all(AppTheme.sm),
         decoration: BoxDecoration(
           color: AppTheme.grayLight,
           borderRadius: BorderRadius.circular(AppTheme.radiusLg),
@@ -96,18 +77,25 @@ class CategoryGrid extends StatelessWidget {
           mainAxisAlignment: MainAxisAlignment.center,
           mainAxisSize: MainAxisSize.min,
           children: [
-            Text(
-              category.emoji,
-              style: const TextStyle(fontSize: 28),
+            // FittedBox ensures emoji never overflows
+            Flexible(
+              child: FittedBox(
+                fit: BoxFit.scaleDown,
+                child: Text(
+                  category.emoji,
+                  style: const TextStyle(fontSize: 28),
+                ),
+              ),
             ),
             const SizedBox(height: 4),
             Text(
               category.name,
               style: const TextStyle(
                 fontFamily: AppTheme.fontBody,
-                fontSize: 11,
+                fontSize: 10,
                 fontWeight: FontWeight.w600,
                 color: AppTheme.textDark,
+                height: 1.2,
               ),
               textAlign: TextAlign.center,
               maxLines: 2,
@@ -120,14 +108,8 @@ class CategoryGrid extends StatelessWidget {
   }
 }
 
-class Category {
+class _Category {
   final String emoji;
   final String name;
-  final String description;
-
-  Category({
-    required this.emoji,
-    required this.name,
-    required this.description,
-  });
+  const _Category(this.emoji, this.name);
 }
