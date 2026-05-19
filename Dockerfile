@@ -20,5 +20,5 @@ COPY . .
 # Expose port
 EXPOSE 5000
 
-# Run application
-CMD gunicorn --bind 0.0.0.0:$PORT "app:create_app()"
+# Run application with proper factory pattern
+CMD ["sh", "-c", "gunicorn --bind 0.0.0.0:$PORT 'app:create_app()'"]
