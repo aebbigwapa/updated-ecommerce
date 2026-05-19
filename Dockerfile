@@ -17,8 +17,12 @@ RUN pip install --no-cache-dir --upgrade pip && \
 # Copy application code
 COPY . .
 
+# Copy and set permissions for startup script
+COPY start.sh /app/start.sh
+RUN chmod +x /app/start.sh
+
 # Expose port
 EXPOSE 5000
 
-# Run application with proper factory pattern
-CMD ["sh", "-c", "gunicorn --bind 0.0.0.0:$PORT 'app:create_app()'"]
+# Run application via startup script
+CMD ["/app/start.sh"]
