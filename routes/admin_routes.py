@@ -656,8 +656,14 @@ def api_admin_earnings_export():
     now_str = datetime.now(timezone.utc).strftime('%b_%Y')
     
     if export_format == 'xlsx':
+        # Try to import pandas, but make it optional
         try:
             import pandas as pd
+            from openpyxl.styles import Font, Alignment, Border, Side, PatternFill
+        except ImportError:
+            return jsonify({'error': 'Excel export requires pandas and openpyxl. Please install them: pip install pandas openpyxl'}), 500
+        
+        try:
             
             df = pd.DataFrame(export_data)
             output = io.BytesIO()
@@ -667,7 +673,6 @@ def api_admin_earnings_export():
                 
                 # Format the sheet
                 worksheet = writer.sheets['Admin Earnings']
-                from openpyxl.styles import Font, Alignment, Border, Side, PatternFill
                 
                 # Header styling
                 header_fill = PatternFill(start_color="1A1A3E", end_color="1A1A3E", fill_type="solid")
