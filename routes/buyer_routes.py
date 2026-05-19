@@ -1130,7 +1130,7 @@ def api_create_return(order_id):
         fus = FileUploadService()
         image_urls = []
         for f in files[:3]:
-            url = fus.save_file(f, subfolder='returns')
+            url = fus.save_file(f, subfolder=f'{order_id}', bucket_type='returns')
             if url:
                 image_urls.append(url)
 
@@ -1245,7 +1245,7 @@ def api_submit_order_review(order_id):
         fus = FileUploadService()
         image_url = None
         for f in files[:3]:
-            url = fus.save_file(f, subfolder='reviews')
+            url = fus.save_file(f, subfolder=f'{product_id}', bucket_type='products')
             if url:
                 image_url = url  # store first image in reviews.image_url
                 break

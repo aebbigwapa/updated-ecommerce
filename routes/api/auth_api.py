@@ -317,7 +317,7 @@ def api_upload_profile_picture():
     try:
         from services.file_upload_service import FileUploadService
         from models.user_model import UserModel
-        url = FileUploadService().save_file(file, subfolder=f'avatars/{user_id}')
+        url = FileUploadService().save_file(file, subfolder=f'{user_id}', bucket_type='avatars')
         if not url:
             return api_error('Upload failed — invalid file or too large', status=400)
         UserModel().update(user_id, {'profile_picture': url})
