@@ -1,0 +1,7 @@
+flask
+supabase
+python-dotenv
+bcrypt
+pandas
+openpyxl
+flask-cors

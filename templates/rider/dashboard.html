@@ -1,0 +1,209 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="csrf-token" content="{{ csrf_token() }}">
+    <title>Grande Rider — Dashboard</title>
+    <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@600;700&family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/dashboard.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/rider.css') }}">
+</head>
+<body>
+
+<div id="sidebarOverlay"></div>
+<button class="sidebar-toggle" id="sidebarToggle">&#9776;</button>
+
+<aside class="sidebar">
+    <div class="sidebar-logo">Grande Rider</div>
+    <ul class="sidebar-menu">
+        <li><a href="/rider" class="active"><span class="icon">🏠</span> Dashboard</a></li>
+        <li class="menu-group">WORK</li>
+        <li><a href="/rider/deliveries"><span class="icon">🚚</span> Deliveries <span class="menu-badge" id="sidebarBadge" style="display:none">0</span></a></li>
+        <li class="menu-group">FINANCE</li>
+        <li><a href="/rider/earnings"><span class="icon">💰</span> Earnings</a></li>
+        <li class="menu-group">ACCOUNT</li>
+        <li><a href="/rider/profile"><span class="icon">👤</span> Profile</a></li>
+        <li class="menu-group">SUPPORT</li>
+        <li><a href="/messages/"><span class="icon">💬</span> Messages</a></li>
+    </ul>
+    <div class="sidebar-footer">
+        <div class="sidebar-user">🏍️ {{ session.user.name }}</div>
+        <a href="/logout" class="logout-link">🚪 Logout</a>
+    </div>
+</aside>
+
+<div class="main">
+    <!-- Topbar -->
+    <div class="topbar">
+        <div class="topbar-title">Dashboard</div>
+        <div class="topbar-right">
+            <div class="avail-toggle" id="availabilityToggle" onclick="toggleAvailability()">
+                <span class="avail-dot" id="availDot"></span>
+                <span id="availLabel">Loading...</span>
+            </div>
+            <div class="notif-bell" id="notifBell" onclick="toggleNotifPanel()">
+                🔔
+                <span class="notif-badge" id="notifCount" style="display:none">0</span>
+            </div>
+        </div>
+    </div>
+
+    <!-- Notification Panel -->
+    <div class="notif-panel" id="notifPanel" style="display:none">
+        <div class="notif-panel-header">
+            <span style="font-weight:700;font-size:14px">Notifications</span>
+            <button onclick="markAllNotifsRead()" class="btn btn-view" style="font-size:11px;padding:3px 10px">Mark all read</button>
+        </div>
+        <div id="notifList"><div class="empty-state" style="padding:24px">No notifications</div></div>
+    </div>
+
+    <div class="content">
+
+        <!-- Welcome Banner -->
+        <div class="rider-welcome-banner">
+            <div class="rider-welcome-left">
+                <div class="rider-avatar">🏍️</div>
+                <div>
+                    <div class="rider-welcome-name">Welcome back, {{ session.user.name.split(' ')[0] }}!</div>
+                    <div class="rider-welcome-sub">Ready to deliver today?</div>
+                </div>
+            </div>
+            <a href="/rider/deliveries" class="btn btn-primary" style="font-size:13px">View Deliveries →</a>
+        </div>
+
+        <!-- Stats Row -->
+        <div class="stats">
+            <div class="stat-card">
+                <div class="stat-label">Today's Deliveries</div>
+                <div class="stat-value" id="statToday">0</div>
+                <div class="stat-icon">📦</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-label">Available</div>
+                <div class="stat-value" id="statAvailable">0</div>
+                <div class="stat-icon">⏳</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-label">Active</div>
+                <div class="stat-value" id="statActive">0</div>
+                <div class="stat-icon">🔄</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-label">Completed</div>
+                <div class="stat-value" id="statCompleted">0</div>
+                <div class="stat-icon">✅</div>
+            </div>
+            <div class="stat-card stat-card-earnings">
+                <div class="stat-label">Today's Earnings</div>
+                <div class="stat-value" id="statEarningsToday">₱0</div>
+                <div class="stat-icon">💰</div>
+            </div>
+        </div>
+
+        <!-- Earnings Banner -->
+        <div class="rider-earnings-banner">
+            <div class="rider-earnings-main">
+                <div class="rider-earnings-label">Total Earnings</div>
+                <div class="rider-earnings-big" id="earningsBig">₱0.00</div>
+                <div class="rider-earnings-rate" id="rateLabel">₱50 per delivery</div>
+            </div>
+            <div class="rider-earnings-breakdown">
+                <div class="rider-earn-item">
+                    <div class="rider-earn-period">Today</div>
+                    <div class="rider-earn-val" id="earningsToday">₱0</div>
+                </div>
+                <div class="rider-earn-divider"></div>
+                <div class="rider-earn-item">
+                    <div class="rider-earn-period">This Week</div>
+                    <div class="rider-earn-val" id="earningsWeek">₱0</div>
+                </div>
+                <div class="rider-earn-divider"></div>
+                <div class="rider-earn-item">
+                    <div class="rider-earn-period">This Month</div>
+                    <div class="rider-earn-val" id="earningsMonth">₱0</div>
+                </div>
+            </div>
+        </div>
+
+        <div class="rider-two-col">
+
+            <!-- Performance Card -->
+            <div class="card">
+                <div class="card-header">
+                    <h2>📊 Performance</h2>
+                </div>
+                <div class="perf-grid" id="perfGrid">
+                    <div class="perf-item">
+                        <div class="perf-val" id="perfRating">—</div>
+                        <div class="perf-label">Avg Rating</div>
+                    </div>
+                    <div class="perf-item">
+                        <div class="perf-val" id="perfTotal">0</div>
+                        <div class="perf-label">Total Deliveries</div>
+                    </div>
+                    <div class="perf-item">
+                        <div class="perf-val" id="perfAccept">—%</div>
+                        <div class="perf-label">Acceptance Rate</div>
+                    </div>
+                    <div class="perf-item">
+                        <div class="perf-val" id="perfLate">—%</div>
+                        <div class="perf-label">Late Deliveries</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Active Orders -->
+            <div class="card">
+                <div class="card-header">
+                    <h2>🔄 Active Orders</h2>
+                    <a href="/rider/deliveries" class="btn btn-view">View All</a>
+                </div>
+                <div id="activeOrdersList">
+                    <div class="empty-state" style="padding:24px">
+                        <div class="empty-icon">🚚</div>No active orders
+                    </div>
+                </div>
+            </div>
+
+        </div>
+
+        <!-- Earnings Chart -->
+        <div class="card">
+            <div class="card-header"><h2>📈 Daily Earnings — Last 7 Days</h2></div>
+            <div style="padding:16px 20px 20px">
+                <canvas id="riderEarningsChart" height="140"></canvas>
+            </div>
+        </div>
+
+        <!-- Recent Deliveries -->
+        <div class="card">
+            <div class="card-header">
+                <h2>Recent Deliveries</h2>
+                <a href="/rider/deliveries" class="btn btn-view">View All</a>
+            </div>
+            <div class="table-responsive">
+                <table class="table">
+                    <thead>
+                        <tr>
+                            <th>Order ID</th>
+                            <th>Customer</th>
+                            <th>Earned</th>
+                            <th>Rating</th>
+                            <th>Status</th>
+                        </tr>
+                    </thead>
+                    <tbody id="riderRecentDeliveries"></tbody>
+                </table>
+            </div>
+        </div>
+
+    </div>
+</div>
+
+<div class="toast" id="toast"></div>
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script src="{{ url_for('static', filename='js/api.js') }}"></script>
+<script src="{{ url_for('static', filename='js/rider.js') }}"></script>
+</body>
+</html>

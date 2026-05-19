@@ -1,0 +1,153 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Grande Seller — Store Profile</title>
+    <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@600;700&family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/dashboard.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/seller.css') }}">
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+</head>
+<body>
+
+<div id="sidebarOverlay"></div>
+<button class="sidebar-toggle" id="sidebarToggle">&#9776;</button>
+
+<aside class="sidebar">
+    <div class="sidebar-logo">Grande Seller</div>
+    <ul class="sidebar-menu">
+        <li><a href="/seller"><span class="icon">🏠</span> Dashboard</a></li>
+        <li class="menu-group">STORE</li>
+        <li><a href="/seller/products"><span class="icon">📦</span> Products</a></li>
+        <li><a href="/seller/orders"><span class="icon">🛒</span> Orders</a></li>
+        <li><a href="/seller/shipping"><span class="icon">🚚</span> Shipping</a></li>
+        <li class="menu-group">FINANCE</li>
+        <li><a href="/seller/earnings"><span class="icon">💰</span> Earnings</a></li>
+        <li class="menu-group">PROFILE</li>
+        <li><a href="/seller/store" class="active"><span class="icon">🏬</span> Store Profile</a></li>
+        <li><a href="/seller/reviews"><span class="icon">⭐</span> Reviews</a></li>
+    </ul>
+    <div class="sidebar-footer">
+        <div class="sidebar-user">🏪 {{ session.user.name }}</div>
+        <a href="/logout" class="logout-link">🚪 Logout</a>
+    </div>
+</aside>
+
+<div class="main">
+    <div class="topbar">
+        <div class="topbar-title">Store Profile</div>
+        <div class="topbar-right">Seller Panel</div>
+    </div>
+    <div class="content">
+        <div class="card store-form">
+            <!-- Profile picture -->
+            <div style="display:flex;align-items:center;gap:18px;margin-bottom:24px;padding-bottom:20px;border-bottom:1px solid #f0f0f0">
+                <div style="position:relative;width:80px;height:80px;flex-shrink:0">
+                    <img id="avatarImg" src="" alt="Avatar"
+                         style="width:80px;height:80px;border-radius:50%;object-fit:cover;border:3px solid #FF2BAC;display:none">
+                    <div id="avatarInitial" style="width:80px;height:80px;border-radius:50%;background:linear-gradient(135deg,#FF2BAC,#FF9ED6);
+                         display:flex;align-items:center;justify-content:center;font-size:32px;color:#fff;font-weight:700">
+                        {{ (session.user.name or 'S')[0]|upper }}
+                    </div>
+                    <label for="avatarInput" title="Change photo"
+                           style="position:absolute;bottom:0;right:0;width:26px;height:26px;border-radius:50%;
+                                  background:#FF2BAC;display:flex;align-items:center;justify-content:center;
+                                  cursor:pointer;border:2px solid #fff;box-shadow:0 1px 4px rgba(0,0,0,.2)">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" fill="white" viewBox="0 0 16 16">
+                          <path d="M10.5 8.5a2.5 2.5 0 1 1-5 0 2.5 2.5 0 0 1 5 0z"/>
+                          <path d="M2 4a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V6a2 2 0 0 0-2-2h-1.172a2 2 0 0 1-1.414-.586l-.828-.828A2 2 0 0 0 9.172 2H6.828a2 2 0 0 0-1.414.586l-.828.828A2 2 0 0 0 3.172 4H2zm.5 2a.5.5 0 1 1 0-1 .5.5 0 0 1 0 1zm9 2.5a3.5 3.5 0 1 1-7 0 3.5 3.5 0 0 1 7 0z"/>
+                        </svg>
+                    </label>
+                    <input id="avatarInput" type="file" accept="image/*" style="display:none">
+                    <div id="avatarSpinner" style="display:none;position:absolute;inset:0;border-radius:50%;
+                         background:rgba(0,0,0,.4);align-items:center;justify-content:center">
+                        <div style="width:20px;height:20px;border:2px solid #fff;border-top-color:transparent;border-radius:50%;animation:spin .7s linear infinite"></div>
+                    </div>
+                </div>
+                <div>
+                    <div style="font-weight:700;font-size:16px;color:#1a1a3e">{{ session.user.name }}</div>
+                    <div style="font-size:12px;color:#6c757d">{{ session.user.email }}</div>
+                    <div style="font-size:11px;color:#FF2BAC;font-weight:600;margin-top:4px">Seller</div>
+                </div>
+            </div>
+            <form id="storeForm">
+                <div class="form-group" style="margin-bottom:18px">
+                    <label class="form-label">Store Name</label>
+                    <input type="text" id="store_name" class="form-input" placeholder="Your store name" value="{{ store.store_name if store else '' }}">
+                </div>
+                <div class="form-group" style="margin-bottom:18px">
+                    <label class="form-label">Description</label>
+                    <textarea id="store_description" class="form-input" rows="3" placeholder="Tell customers about your store...">{{ store.store_description if store else '' }}</textarea>
+                </div>
+                <div class="form-group" style="margin-bottom:18px">
+                    <label class="form-label">Store Logo</label>
+                    <div class="upload-area">
+                        <input type="file" accept="image/*">
+                        <div style="font-size:24px">🖼️</div>
+                        <div style="font-size:12px;color:var(--gray);margin-top:4px"><span style="color:var(--pink);font-weight:600">Click to upload</span> logo</div>
+                    </div>
+                </div>
+                <div class="form-group" style="margin-bottom:18px">
+                    <label class="form-label">Operating Hours</label>
+                    <div class="time-grid">
+                        <input type="time" id="open_time"  class="form-input" value="08:00">
+                        <input type="time" id="close_time" class="form-input" value="20:00">
+                    </div>
+                </div>
+                <div class="form-group" style="margin-bottom:18px">
+                    <label class="form-label">Store Location (Pin on Map)</label>
+                    <div id="storeMap"></div>
+                    <div class="coords-display" id="coordsDisplay">📍 Click map to pin location</div>
+                    <input type="hidden" id="store_latitude">
+                    <input type="hidden" id="store_longitude">
+                </div>
+                <button type="submit" class="btn btn-primary">Save Changes</button>
+            </form>
+        </div>
+    </div>
+</div>
+
+<div class="toast" id="toast"></div>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="{{ url_for('static', filename='js/api.js') }}"></script>
+<script src="{{ url_for('static', filename='js/seller.js') }}"></script>
+<script>
+(function(){
+  // Load existing picture via session cookie (no Bearer token needed for web)
+  fetch('/api/auth/me', { credentials: 'include' })
+    .then(r => r.json()).then(d => {
+      const pic = (d.data && d.data.user) ? d.data.user.profile_picture : null;
+      if (pic) _setAvatar(pic);
+    }).catch(() => {});
+
+  document.getElementById('avatarInput').addEventListener('change', async function(){
+    const file = this.files[0]; if (!file) return;
+    const sp = document.getElementById('avatarSpinner');
+    sp.style.display = 'flex';
+    const fd = new FormData(); fd.append('photo', file);
+    try {
+      const res = await fetch('/api/profile/picture', {
+        method: 'POST', body: fd, credentials: 'include',
+      });
+      const data = await res.json();
+      if (res.ok && data.data && data.data.profile_picture) {
+        _setAvatar(data.data.profile_picture);
+        showToast && showToast('Profile picture updated!');
+      } else {
+        showToast && showToast(data.error || 'Upload failed', true);
+      }
+    } catch(e) { showToast && showToast('Upload failed', true); }
+    finally { sp.style.display = 'none'; this.value = ''; }
+  });
+  function _setAvatar(url) {
+    const img = document.getElementById('avatarImg');
+    const ini = document.getElementById('avatarInitial');
+    img.src = url; img.style.display = 'block';
+    if (ini) ini.style.display = 'none';
+  }
+})();
+</script>
+<style>@keyframes spin{to{transform:rotate(360deg)}}</style>
+</body>
+</html>
