@@ -191,12 +191,13 @@ def api_send_otp():
             result = sb.table('email_otps').update(otp_payload).eq('email', email).execute()
             if not result.data:
                 sb.table('email_otps').insert(otp_payload).execute()
-        except Exception:
+        except Exception as db_err:
             # Fallback: delete then insert
             try:
                 sb.table('email_otps').delete().eq('email', email).execute()
                 sb.table('email_otps').insert(otp_payload).execute()
             except Exception as e:
+                print(f'[API] OTP DB Error: {e}')
                 traceback.print_exc()
                 return api_error("Failed to save OTP. Please try again.", status=500)
 
@@ -208,8 +209,9 @@ def api_send_otp():
         return api_error("Failed to send OTP. Please try again.", status=500)
     except Exception as e:
         import traceback
+        print(f'[API] Send OTP Error: {e}')
         traceback.print_exc()
-        return api_error("Failed to send OTP. Please try again.", status=500)
+        return api_error(f"Failed to send OTP: {str(e)}", status=500)
 
 
 @auth_api_bp.route('/auth/verify-otp', methods=['POST'])
