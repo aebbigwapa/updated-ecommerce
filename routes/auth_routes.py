@@ -264,9 +264,6 @@ def reset_password(token):
 
 def _handle_registration():
     try:
-        if request.form.get('otp_verified') != 'true':
-            return jsonify({'error': 'Email must be verified with OTP first'}), 400
-
         # Server-side phone validation
         phone_error = _validate_phone_server(request.form)
         if phone_error:

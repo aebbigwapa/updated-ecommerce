@@ -135,9 +135,6 @@ def api_register():
         data  = get_json_body()
         files = {}
 
-    if data.get('otp_verified') != 'true':
-        return api_error("Email must be verified with OTP first", status=400)
-
     required = ['first_name', 'last_name', 'email', 'password', 'phone', 'gender', 'role']
     missing  = [k for k in required if not str(data.get(k) or '').strip()]
     if missing:
