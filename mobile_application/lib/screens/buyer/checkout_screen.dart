@@ -99,11 +99,24 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
             ?? (result['order'] as Map?)?['order_id']?.toString()
             ?? '';
         if (mounted) {
-          Navigator.pushNamedAndRemoveUntil(
-            context, '/order-summary',
-            (route) => route.settings.name == '/home',
-            arguments: orderId,
-          );
+          // If GCash payment, redirect to upload proof page
+          if (_paymentMethod == 'gcash') {
+            Navigator.pushNamedAndRemoveUntil(
+              context, '/upload-payment-proof',
+              (route) => route.settings.name == '/home',
+              arguments: {
+                'orderId': orderId,
+                'totalAmount': _total,
+              },
+            );
+          } else {
+            // For other payment methods, go to order summary
+            Navigator.pushNamedAndRemoveUntil(
+              context, '/order-summary',
+              (route) => route.settings.name == '/home',
+              arguments: orderId,
+            );
+          }
         }
       } else {
         ScaffoldMessenger.of(context).showSnackBar(

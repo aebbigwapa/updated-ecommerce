@@ -1734,3 +1734,61 @@ def api_can_review(order_id, product_id):
     except Exception as e:
         return api_error(f"Failed to check review eligibility: {e}", status=500)
 
+# ============================================
+# GCASH PAYMENT PROOF UPLOAD
+# ============================================
+
+@buyer_bp.route('/orders/<order_id>/upload-proof')
+@buyer_required
+def upload_proof_page(order_id):
+    """Render payment proof upload page"""
+    user_id = session['user']['id']
+    order = order_model.get_by_id(order_id)
+    if not order or order.get('buyer_id') != user_id:
+        from flask import abort
+        abort(404)
+    return render_template('buyer/upload_payment_proof.html', order=order)
+
+@buyer_bp.route('/orders/<order_id>/upload-proof', methods=['POST'])
+@buyer_required
+def api_upload_payment_proof(order_id):
+    """Upload GCash payment proof"""
+    try:
+        user_id = session['user']['id']
+        order = order_model.get_by_id(order_id)
+        if not order or order.get('buyer_id') != user_id:
+            return api_error('Order not found', status=404)
+        
+        if order.get('status') != 'pending_payment':
+            return api_error('Order is not waiting for payment proof', status=400)
+        
+        if 'receipt' not in request.files:
+            return api_error('No file uploaded', status=400)
+        
+        file = request.files['receipt']
+        if not file or file.filename == '':
+            return api_error('No file selected', status=400)
+        
+        # Upload to Supabase storage
+        from services.file_upload_service import FileUploadService
+        fus = FileUploadService()
+        proof_url = fus.save_file(file, subfolder=f'payments/{order_id}', bucket_type='payments')
+        
+        if not proof_url:
+            return api_error('Failed to upload file', status=500)
+        
+        # Update order with payment proof URL
+        updated = order_model.upload_payment_proof(order_id, proof_url)
+        if not updated:
+            return api_error('Failed to update order', status=500)
+        
+        return api_response(
+            data={'order': serialize_order(updated)},
+            message='Payment proof uploaded successfully',
+            status=200
+        )
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return api_error(f'Failed to upload payment proof: {str(e)}', status=500)
+

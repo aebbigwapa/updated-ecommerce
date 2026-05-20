@@ -708,3 +708,85 @@ class OrderModel:
         except Exception as e:
             logging.error(f"clear_cart error: {e}")
             return False
+    
+    # GCash Payment Methods
+    def upload_payment_proof(self, order_id, proof_url):
+        """Upload payment proof for GCash orders"""
+        result = self.supabase.table('orders').update({
+            'payment_proof_url': proof_url
+        }).eq('id', order_id).eq('status', 'pending_payment').execute()
+        return result.data[0] if result.data else None
+    
+    def verify_payment(self, order_id, seller_id, approved, rejection_reason=None):
+        """Seller verifies payment proof"""
+        # Check if seller owns products in this order
+        product_result = self.supabase.table('products').select('id').eq('seller_id', seller_id).execute()
+        product_ids = [p.get('id') for p in (product_result.data or [])]
+        if not product_ids:
+            return None
+        
+        owned_items = self.supabase.table('order_items').select('id').eq('order_id', order_id).in_('product_id', product_ids).limit(1).execute()
+        if not owned_items.data:
+            return None
+        
+        if approved:
+            # Approve payment - move to pending status and deduct stock
+            result = self.supabase.table('orders').update({
+                'payment_verified': True,
+                'payment_verified_at': 'now()',
+                'payment_verified_by': seller_id,
+                'status': 'pending'
+            }).eq('id', order_id).eq('status', 'pending_payment').execute()
+            
+            # Deduct stock now that payment is verified
+            if result.data:
+                items = self.supabase.table('order_items').select('product_id, variant_id, quantity').eq('order_id', order_id).execute()
+                for item in (items.data or []):
+                    self._deduct_stock(
+                        item['product_id'],
+                        item.get('variant_id'),
+                        int(item['quantity'])
+                    )
+            
+            return result.data[0] if result.data else None
+        else:
+            # Reject payment - cancel order
+            result = self.supabase.table('orders').update({
+                'payment_verified': False,
+                'payment_rejection_reason': rejection_reason,
+                'status': 'cancelled'
+            }).eq('id', order_id).eq('status', 'pending_payment').execute()
+            return result.data[0] if result.data else None
+    
+    def get_pending_payment_orders(self, seller_id):
+        """Get orders waiting for payment verification for seller's products"""
+        # Get seller's product IDs
+        product_result = self.supabase.table('products').select('id').eq('seller_id', seller_id).execute()
+        product_ids = [p.get('id') for p in (product_result.data or [])]
+        if not product_ids:
+            return []
+        
+        # Get orders with pending payment containing seller's products
+        result = self.supabase.table('order_items').select(
+            '*, product:products(name, seller_id), order:orders(*)'
+        ).in_('product_id', product_ids).execute()
+        
+        # Filter for pending_payment status and group by order
+        orders_map = {}
+        for item in (result.data or []):
+            order = item.get('order', {})
+            if order.get('status') == 'pending_payment' and order.get('payment_proof_url'):
+                order_id = order['id']
+                if order_id not in orders_map:
+                    orders_map[order_id] = {
+                        **order,
+                        'items': []
+                    }
+                    # Fetch buyer info
+                    if order.get('buyer_id'):
+                        buyer = self.supabase.table('users').select('first_name, last_name, email').eq('id', order['buyer_id']).single().execute()
+                        if buyer.data:
+                            orders_map[order_id]['buyer'] = buyer.data
+                orders_map[order_id]['items'].append(item)
+        
+        return list(orders_map.values())

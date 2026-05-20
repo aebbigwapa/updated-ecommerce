@@ -829,3 +829,71 @@ def api_get_cancellation_requests():
         import traceback; traceback.print_exc()
         return api_error(f'Failed to get cancellation requests: {str(e)}', status=500)
 
+# ============================================
+# GCASH PAYMENT VERIFICATION
+# ============================================
+
+@seller_bp.route('/verify-payments')
+@seller_required
+def verify_payments():
+    """Render payment verification page"""
+    seller_id = session['user']['id']
+    from models.order_model import OrderModel
+    order_model = OrderModel()
+    pending_orders = order_model.get_pending_payment_orders(seller_id)
+    return render_template('seller/verify_payment.html', pending_orders=pending_orders)
+
+@seller_bp.route('/orders/<order_id>/verify-payment', methods=['POST'])
+@seller_required
+def api_verify_payment(order_id):
+    """Seller verifies GCash payment proof"""
+    try:
+        seller_id = session['user']['id']
+        data = request.get_json() or {}
+        approved = data.get('approved', False)
+        reason = data.get('reason', '')
+        
+        from models.order_model import OrderModel
+        from models.notification_model import NotificationModel
+        
+        order_model = OrderModel()
+        notification_model = NotificationModel()
+        
+        # Verify payment
+        updated = order_model.verify_payment(order_id, seller_id, approved, reason)
+        if not updated:
+            return api_error('Failed to verify payment or unauthorized', status=400)
+        
+        # Get order details for notification
+        order = order_model.get_by_id(order_id)
+        buyer_id = order.get('buyer_id') if order else None
+        
+        # Notify buyer
+        if buyer_id:
+            if approved:
+                notification_model.create(
+                    buyer_id,
+                    'payment_approved',
+                    'Payment Approved',
+                    f'Your payment for order #{order_id[:8].upper()} has been verified. Your order is now being processed.',
+                    f'/buyer/orders/{order_id}'
+                )
+            else:
+                notification_model.create(
+                    buyer_id,
+                    'payment_rejected',
+                    'Payment Rejected',
+                    f'Your payment for order #{order_id[:8].upper()} was rejected. Reason: {reason}',
+                    f'/buyer/orders/{order_id}'
+                )
+        
+        return api_response(
+            data={'order': serialize_order(updated)},
+            message='Payment verified successfully' if approved else 'Payment rejected',
+            status=200
+        )
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return api_error(f'Failed to verify payment: {str(e)}', status=500)
+

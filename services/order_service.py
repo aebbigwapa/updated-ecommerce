@@ -56,6 +56,12 @@ class OrderService:
         shipping_fee = ShippingFeeCalculator.calculate(distance_km)
         total_amount = subtotal + shipping_fee
         
+        # Determine initial status based on payment method
+        if payment_method == 'gcash':
+            initial_status = 'pending_payment'  # Wait for payment proof
+        else:
+            initial_status = 'pending'  # COD or other methods
+        
         # Create order with stock reservation
         try:
             order_data = {
@@ -63,7 +69,7 @@ class OrderService:
                 'total_amount': total_amount,
                 'shipping_fee': shipping_fee,
                 'distance_km': distance_km,
-                'status': 'pending',
+                'status': initial_status,
                 'payment_method': payment_method,
                 'shipping_address': address
             }

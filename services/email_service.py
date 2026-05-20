@@ -1,17 +1,12 @@
 import smtplib
 import os
 import secrets
-import logging
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 
-# Configure logging
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
-
 
 def _send(to_email: str, subject: str, html_body: str) -> bool:
-    """Send an email with proper error handling and logging. Returns True on success, False on failure."""
+    """Send an email. Returns True on success, False on failure."""
     try:
         server   = os.getenv('SMTP_SERVER', 'smtp.gmail.com')
         port     = int(os.getenv('SMTP_PORT', 587))
@@ -19,10 +14,11 @@ def _send(to_email: str, subject: str, html_body: str) -> bool:
         password = os.getenv('EMAIL_PASSWORD', '')
         use_tls  = os.getenv('EMAIL_USE_TLS', 'True').lower() == 'true'
 
-        # Validate configuration
         if not sender or not password:
-            logger.error('Email configuration incomplete: EMAIL_ADDRESS or EMAIL_PASSWORD not set')
+            print('[EmailService] ERROR: EMAIL_ADDRESS or EMAIL_PASSWORD not configured')
             return False
+
+        print(f'[EmailService] Sending to {to_email} via {server}:{port}')
 
         msg = MIMEMultipart('alternative')
         msg['Subject'] = subject
@@ -30,30 +26,23 @@ def _send(to_email: str, subject: str, html_body: str) -> bool:
         msg['To']      = to_email
         msg.attach(MIMEText(html_body, 'html'))
 
-        logger.info(f'Attempting to send email to {to_email} via {server}:{port}')
-
         with smtplib.SMTP(server, port, timeout=10) as smtp:
-            smtp.set_debuglevel(0)  # Set to 1 for verbose SMTP debugging
             if use_tls:
                 smtp.starttls()
             smtp.login(sender, password)
             smtp.sendmail(sender, to_email, msg.as_string())
         
-        logger.info(f'✅ Email sent successfully to {to_email}')
+        print(f'[EmailService] SUCCESS: sent to {to_email}')
         return True
-        
     except smtplib.SMTPAuthenticationError as e:
-        logger.error(f'❌ SMTP Authentication failed: {e}')
-        logger.error('   Check your EMAIL_ADDRESS and EMAIL_PASSWORD in .env')
-        logger.error('   For Gmail: Make sure you\'re using an App Password, not your regular password')
+        print(f'[EmailService] AUTH ERROR: {e}')
+        print('[EmailService] Check: 1) App password correct, 2) 2-Step Verification enabled')
         return False
-        
     except smtplib.SMTPException as e:
-        logger.error(f'❌ SMTP error sending to {to_email}: {e}')
+        print(f'[EmailService] SMTP ERROR: {e}')
         return False
-        
     except Exception as e:
-        logger.error(f'❌ Unexpected error sending email to {to_email}: {e}')
+        print(f'[EmailService] ERROR: {e}')
         import traceback
         traceback.print_exc()
         return False
@@ -222,7 +211,7 @@ def send_otp_email(to_email: str, name: str, otp: str) -> bool:
         <p style="font-size:16px;color:#1a1a3e;margin:0 0 8px">Hi <strong>{name}</strong>,</p>
         <p style="font-size:14px;color:#6c757d;margin:0 0 28px">
           Thank you for registering! Please verify your email address by entering the code below.
-          This code expires in <strong>10 minutes</strong>.
+          This code expires in <strong>1 minute</strong>.
         </p>
 
         <div style="text-align:center;margin-bottom:28px">
