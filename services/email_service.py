@@ -9,7 +9,7 @@ def _send(to_email: str, subject: str, html_body: str) -> bool:
     """Send an email. Returns True on success, False on failure."""
     try:
         server   = os.getenv('SMTP_SERVER', 'smtp.gmail.com')
-        port     = int(os.getenv('SMTP_PORT', 465))
+        port     = int(os.getenv('SMTP_PORT', 587))
         sender   = os.getenv('EMAIL_ADDRESS', '')
         password = os.getenv('EMAIL_PASSWORD', '')
 
@@ -25,9 +25,15 @@ def _send(to_email: str, subject: str, html_body: str) -> bool:
         msg['To']      = to_email
         msg.attach(MIMEText(html_body, 'html'))
 
-        with smtplib.SMTP_SSL(server, port, timeout=10) as smtp:
-            smtp.login(sender, password)
-            smtp.sendmail(sender, to_email, msg.as_string())
+        if port == 465:
+            with smtplib.SMTP_SSL(server, port, timeout=10) as smtp:
+                smtp.login(sender, password)
+                smtp.sendmail(sender, to_email, msg.as_string())
+        else:
+            with smtplib.SMTP(server, port, timeout=10) as smtp:
+                smtp.starttls()
+                smtp.login(sender, password)
+                smtp.sendmail(sender, to_email, msg.as_string())
         
         print(f'[EmailService] SUCCESS: sent to {to_email}')
         return True
