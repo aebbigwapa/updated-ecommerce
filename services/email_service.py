@@ -8,17 +8,57 @@ from email.mime.text import MIMEText
 def _send(to_email: str, subject: str, html_body: str) -> bool:
     """Send an email. Returns True on success, False on failure."""
     try:
-        # Check if SendGrid API key is available
+        # Priority: Resend > SendGrid > SMTP
+        resend_key = os.getenv('RESEND_API_KEY', '')
         sendgrid_key = os.getenv('SENDGRID_API_KEY', '')
         
-        if sendgrid_key:
-            # Use SendGrid API (works on Render free tier)
+        if resend_key:
+            return _send_via_resend(to_email, subject, html_body, resend_key)
+        elif sendgrid_key:
             return _send_via_sendgrid(to_email, subject, html_body, sendgrid_key)
         else:
-            # Fallback to SMTP (only works locally or on paid hosting)
             return _send_via_smtp(to_email, subject, html_body)
     except Exception as e:
         print(f'[EmailService] ERROR: {e}')
+        import traceback
+        traceback.print_exc()
+        return False
+
+
+def _send_via_resend(to_email: str, subject: str, html_body: str, api_key: str) -> bool:
+    """Send email via Resend API (easiest option)."""
+    try:
+        import requests
+        sender = os.getenv('EMAIL_ADDRESS', 'onboarding@resend.dev')
+        
+        payload = {
+            "from": f"Grande Marketplace <{sender}>",
+            "to": [to_email],
+            "subject": subject,
+            "html": html_body
+        }
+        
+        headers = {
+            "Authorization": f"Bearer {api_key}",
+            "Content-Type": "application/json"
+        }
+        
+        print(f'[EmailService] Sending via Resend to {to_email}')
+        response = requests.post(
+            'https://api.resend.com/emails',
+            json=payload,
+            headers=headers,
+            timeout=10
+        )
+        
+        if response.status_code in (200, 201):
+            print(f'[EmailService] SUCCESS: sent to {to_email}')
+            return True
+        else:
+            print(f'[EmailService] Resend Error: {response.status_code} - {response.text}')
+            return False
+    except Exception as e:
+        print(f'[EmailService] Resend ERROR: {e}')
         import traceback
         traceback.print_exc()
         return False
