@@ -22,7 +22,7 @@ from routes.api.api_helpers import (
 auth_api_bp = Blueprint('auth_api', __name__)
 
 
-@auth_api_bp.post('/auth/login')
+@auth_api_bp.route('/auth/login', methods=['POST'])
 def api_login():
     data     = get_json_body()
     email    = (data.get('email') or '').strip().lower()
@@ -61,7 +61,7 @@ def api_login():
     )
 
 
-@auth_api_bp.post('/auth/login-verify-otp')
+@auth_api_bp.route('/auth/login-verify-otp', methods=['POST'])
 def api_login_verify_otp():
     """Step 2 of login: verify OTP then issue token."""
     data  = get_json_body()
@@ -121,7 +121,7 @@ def api_login_verify_otp():
     )
 
 
-@auth_api_bp.post('/auth/register')
+@auth_api_bp.route('/auth/register', methods=['POST'])
 def api_register():
     """
     Full multipart/form-data registration for buyer, seller, and rider.
@@ -167,7 +167,7 @@ def api_register():
     )
 
 
-@auth_api_bp.post('/auth/send-otp')
+@auth_api_bp.route('/auth/send-otp', methods=['POST'])
 def api_send_otp():
     data  = get_json_body()
     email = str(data.get('email') or '').strip().lower()
@@ -212,7 +212,7 @@ def api_send_otp():
         return api_error("Failed to send OTP. Please try again.", status=500)
 
 
-@auth_api_bp.post('/auth/verify-otp')
+@auth_api_bp.route('/auth/verify-otp', methods=['POST'])
 def api_verify_otp():
     data  = get_json_body()
     email = str(data.get('email') or '').strip().lower()
@@ -244,7 +244,7 @@ def api_verify_otp():
     return api_response(message="Email verified successfully", status=200)
 
 
-@auth_api_bp.post('/auth/reset-password')
+@auth_api_bp.route('/auth/reset-password', methods=['POST'])
 def api_reset_password():
     data         = get_json_body()
     email        = str(data.get('email') or '').strip().lower()
@@ -288,12 +288,12 @@ def api_reset_password():
     return api_response(message="Password reset successfully", status=200)
 
 
-@auth_api_bp.post('/auth/reset_password')
+@auth_api_bp.route('/auth/reset_password', methods=['POST'])
 def api_reset_password_alias():
     return api_reset_password()
 
 
-@auth_api_bp.post('/auth/logout')
+@auth_api_bp.route('/auth/logout', methods=['POST'])
 def api_logout():
     try:
         session.clear()
@@ -302,7 +302,7 @@ def api_logout():
     return api_response(message="Logged out", status=200)
 
 
-@auth_api_bp.post('/profile/picture')
+@auth_api_bp.route('/profile/picture', methods=['POST'])
 @token_required
 def api_upload_profile_picture():
     """Upload/replace profile picture for any authenticated role."""
@@ -327,7 +327,7 @@ def api_upload_profile_picture():
         return api_error(f'Upload failed: {e}', status=500)
 
 
-@auth_api_bp.get('/auth/me')
+@auth_api_bp.route('/auth/me', methods=['GET'])
 @token_required
 def api_me():
     user = get_current_user() or {}
