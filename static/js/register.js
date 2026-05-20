@@ -336,7 +336,7 @@ async function sendOTP() {
     btn.textContent = 'Sending...';
 
     try {
-        const res  = await fetch('/send-otp', {
+        const res  = await fetch('/api/auth/send-otp', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ email }),
@@ -377,7 +377,7 @@ async function resendOTP() {
     resendBtn.textContent = 'Sending...';
 
     try {
-        const res  = await fetch('/send-otp', {
+        const res  = await fetch('/api/auth/send-otp', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ email }),
@@ -414,7 +414,7 @@ async function verifyOTP() {
     if (!otp || otp.length !== 6) return;
 
     try {
-        const res  = await fetch('/verify-otp', {
+        const res  = await fetch('/api/auth/verify-otp', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ email, otp }),
@@ -558,7 +558,7 @@ document.getElementById('registerForm').addEventListener('submit', async (e) => 
     }
 
     try {
-        const res  = await fetch('/register', { method: 'POST', body: fd });
+        const res  = await fetch('/api/auth/register', { method: 'POST', body: fd });
         const data = await res.json();
 
         if (res.ok) {
