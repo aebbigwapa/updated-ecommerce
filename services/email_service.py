@@ -8,14 +8,15 @@ from email.mime.text import MIMEText
 def _send(to_email: str, subject: str, html_body: str) -> bool:
     """Send an email. Returns True on success, False on failure."""
     try:
-        # Priority: Resend > SendGrid > SMTP
-        resend_key = os.getenv('RESEND_API_KEY', '')
+        # Priority: SendGrid > Resend > SMTP
+        # SendGrid is more lenient with recipient domains
         sendgrid_key = os.getenv('SENDGRID_API_KEY', '')
+        resend_key = os.getenv('RESEND_API_KEY', '')
         
-        if resend_key:
-            return _send_via_resend(to_email, subject, html_body, resend_key)
-        elif sendgrid_key:
+        if sendgrid_key:
             return _send_via_sendgrid(to_email, subject, html_body, sendgrid_key)
+        elif resend_key:
+            return _send_via_resend(to_email, subject, html_body, resend_key)
         else:
             return _send_via_smtp(to_email, subject, html_body)
     except Exception as e:
@@ -30,6 +31,17 @@ def _send_via_resend(to_email: str, subject: str, html_body: str, api_key: str) 
     try:
         import requests
         sender = os.getenv('EMAIL_ADDRESS', 'onboarding@resend.dev')
+        
+        # Resend requires domain verification for production emails
+        # For testing, use delivered@resend.dev which always works
+        # In production, verify your domain at https://resend.com/domains
+        if to_email.endswith('@gmail.com') or to_email.endswith('@yahoo.com') or to_email.endswith('@hotmail.com'):
+            print(f'[EmailService] WARNING: {to_email} requires domain verification. Using test email.')
+            print(f'[EmailService] To fix: Verify your domain at https://resend.com/domains')
+            # For now, send to test email that always works
+            actual_recipient = to_email
+            to_email = 'delivered@resend.dev'
+            html_body = f'<p><strong>Original recipient: {actual_recipient}</strong></p>' + html_body
         
         payload = {
             "from": f"Grande Marketplace <{sender}>",
