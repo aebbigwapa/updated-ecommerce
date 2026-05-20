@@ -381,7 +381,7 @@ def rider_upload_proof(order_id):
     file = request.files['proof_image']
     if not file or not file.filename:
         return api_error('No image file selected', status=400)
-    image_url = FileUploadService().save_file(file, subfolder=f'deliveries/{order_id}')
+    image_url = FileUploadService().save_file(file, subfolder=f'{order_id}', bucket_type='deliveries')
     if not image_url:
         return api_error('Failed to upload image', status=400)
     from supabase import create_client

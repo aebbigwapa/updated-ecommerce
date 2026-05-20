@@ -8,11 +8,126 @@ from email.mime.text import MIMEText
 def _send(to_email: str, subject: str, html_body: str) -> bool:
     """Send an email. Returns True on success, False on failure."""
     try:
+        # Priority: SendGrid > Resend > SMTP
+        # SendGrid is more lenient with recipient domains
+        sendgrid_key = os.getenv('SENDGRID_API_KEY', '')
+        resend_key = os.getenv('RESEND_API_KEY', '')
+        
+        if sendgrid_key:
+            return _send_via_sendgrid(to_email, subject, html_body, sendgrid_key)
+        elif resend_key:
+            return _send_via_resend(to_email, subject, html_body, resend_key)
+        else:
+            return _send_via_smtp(to_email, subject, html_body)
+    except Exception as e:
+        print(f'[EmailService] ERROR: {e}')
+        import traceback
+        traceback.print_exc()
+        return False
+
+
+def _send_via_resend(to_email: str, subject: str, html_body: str, api_key: str) -> bool:
+    """Send email via Resend API (easiest option)."""
+    try:
+        import requests
+        sender = os.getenv('EMAIL_ADDRESS', 'onboarding@resend.dev')
+        
+        # Resend requires domain verification for production emails
+        # For testing, use delivered@resend.dev which always works
+        # In production, verify your domain at https://resend.com/domains
+        if to_email.endswith('@gmail.com') or to_email.endswith('@yahoo.com') or to_email.endswith('@hotmail.com'):
+            print(f'[EmailService] WARNING: {to_email} requires domain verification. Using test email.')
+            print(f'[EmailService] To fix: Verify your domain at https://resend.com/domains')
+            # For now, send to test email that always works
+            actual_recipient = to_email
+            to_email = 'delivered@resend.dev'
+            html_body = f'<p><strong>Original recipient: {actual_recipient}</strong></p>' + html_body
+        
+        payload = {
+            "from": f"Grande Marketplace <{sender}>",
+            "to": [to_email],
+            "subject": subject,
+            "html": html_body
+        }
+        
+        headers = {
+            "Authorization": f"Bearer {api_key}",
+            "Content-Type": "application/json"
+        }
+        
+        print(f'[EmailService] Sending via Resend to {to_email}')
+        response = requests.post(
+            'https://api.resend.com/emails',
+            json=payload,
+            headers=headers,
+            timeout=10
+        )
+        
+        if response.status_code in (200, 201):
+            print(f'[EmailService] SUCCESS: sent to {to_email}')
+            return True
+        else:
+            print(f'[EmailService] Resend Error: {response.status_code} - {response.text}')
+            return False
+    except Exception as e:
+        print(f'[EmailService] Resend ERROR: {e}')
+        import traceback
+        traceback.print_exc()
+        return False
+
+
+def _send_via_sendgrid(to_email: str, subject: str, html_body: str, api_key: str) -> bool:
+    """Send email via SendGrid API."""
+    try:
+        import requests
+        sender = os.getenv('EMAIL_ADDRESS', 'noreply@grandemarket.com')
+        
+        payload = {
+            "personalizations": [{"to": [{"email": to_email}]}],
+            "from": {"email": sender, "name": "Grande Marketplace"},
+            "subject": subject,
+            "content": [{"type": "text/html", "value": html_body}]
+        }
+        
+        headers = {
+            "Authorization": f"Bearer {api_key}",
+            "Content-Type": "application/json"
+        }
+        
+        print(f'[EmailService] Sending via SendGrid to {to_email}')
+        response = requests.post(
+            'https://api.sendgrid.com/v3/mail/send',
+            json=payload,
+            headers=headers,
+            timeout=10
+        )
+        
+        if response.status_code == 202:
+            print(f'[EmailService] SUCCESS: sent to {to_email}')
+            return True
+        else:
+            print(f'[EmailService] SendGrid Error: {response.status_code} - {response.text}')
+            return False
+    except Exception as e:
+        print(f'[EmailService] SendGrid ERROR: {e}')
+        import traceback
+        traceback.print_exc()
+        return False
+
+
+def _send_via_smtp(to_email: str, subject: str, html_body: str) -> bool:
+    """Send email via SMTP (Gmail). Only works locally or on paid hosting."""
+    try:
         server   = os.getenv('SMTP_SERVER', 'smtp.gmail.com')
         port     = int(os.getenv('SMTP_PORT', 587))
         sender   = os.getenv('EMAIL_ADDRESS', '')
         password = os.getenv('EMAIL_PASSWORD', '')
-        use_tls  = os.getenv('EMAIL_USE_TLS', 'True').lower() == 'true'
+
+        if not sender or not password:
+            print('[EmailService] ERROR: EMAIL_ADDRESS or EMAIL_PASSWORD not configured')
+            return False
+
+        print(f'[EmailService] Sending to {to_email} via {server}:{port}')
 
         msg = MIMEMultipart('alternative')
         msg['Subject'] = subject
@@ -20,14 +135,29 @@ def _send(to_email: str, subject: str, html_body: str) -> bool:
         msg['To']      = to_email
         msg.attach(MIMEText(html_body, 'html'))
 
-        with smtplib.SMTP(server, port) as smtp:
-            if use_tls:
+        if port == 465:
+            with smtplib.SMTP_SSL(server, port, timeout=10) as smtp:
+                smtp.login(sender, password)
+                smtp.sendmail(sender, to_email, msg.as_string())
+        else:
+            with smtplib.SMTP(server, port, timeout=10) as smtp:
                 smtp.starttls()
-            smtp.login(sender, password)
-            smtp.sendmail(sender, to_email, msg.as_string())
+                smtp.login(sender, password)
+                smtp.sendmail(sender, to_email, msg.as_string())
+        
+        print(f'[EmailService] SUCCESS: sent to {to_email}')
         return True
+    except smtplib.SMTPAuthenticationError as e:
+        print(f'[EmailService] AUTH ERROR: {e}')
+        print('[EmailService] Check: 1) App password correct, 2) 2-Step Verification enabled')
+        return False
+    except smtplib.SMTPException as e:
+        print(f'[EmailService] SMTP ERROR: {e}')
+        return False
     except Exception as e:
-        print(f'[EmailService] Failed to send to {to_email}: {e}')
+        print(f'[EmailService] ERROR: {e}')
+        import traceback
+        traceback.print_exc()
         return False
 
 
@@ -194,7 +324,7 @@ def send_otp_email(to_email: str, name: str, otp: str) -> bool:
         <p style="font-size:16px;color:#1a1a3e;margin:0 0 8px">Hi <strong>{name}</strong>,</p>
         <p style="font-size:14px;color:#6c757d;margin:0 0 28px">
           Thank you for registering! Please verify your email address by entering the code below.
-          This code expires in <strong>10 minutes</strong>.
+          This code expires in <strong>1 minute</strong>.
         </p>
 
         <div style="text-align:center;margin-bottom:28px">

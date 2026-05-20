@@ -1246,4 +1246,104 @@ class ApiService {
       return false;
     }
   }
+
+  // ── GCash Payment Proof ──────────────────────────────────────
+
+  static Future<Map<String, dynamic>> uploadPaymentProof(String orderId, File imageFile) async {
+    try {
+      final token = await getAuthToken();
+      if (token == null) return {'success': false, 'error': 'Not logged in'};
+
+      final uri = Uri.parse('$flaskBaseUrl/buyer/orders/$orderId/upload-proof');
+      final req = http.MultipartRequest('POST', uri);
+      req.headers['Authorization'] = 'Bearer $token';
+      req.files.add(await http.MultipartFile.fromPath('receipt', imageFile.path));
+
+      final streamed = await req.send().timeout(const Duration(seconds: 30));
+      final body = _decodeJson(await streamed.stream.bytesToString());
+
+      return {
+        'success': streamed.statusCode == 200,
+        'error': body['error']?.toString(),
+        'message': body['message']?.toString(),
+      };
+    } catch (e) {
+      return {'success': false, 'error': e.toString()};
+    }
+  }
+
+  static Future<List<Map<String, dynamic>>> getPendingPaymentOrders() async {
+    try {
+      final token = await getAuthToken();
+      if (token == null) return [];
+
+      final res = await http.get(
+        Uri.parse('$flaskBaseUrl/seller/verify-payments'),
+        headers: {'Authorization': 'Bearer $token'},
+      ).timeout(const Duration(seconds: 10));
+
+      // This endpoint returns HTML, so we need to call the API endpoint instead
+      // Let's use the seller orders endpoint and filter for pending_payment
+      final ordersRes = await http.get(
+        Uri.parse('$flaskBaseUrl/api/seller/orders'),
+        headers: {'Authorization': 'Bearer $token'},
+      ).timeout(const Duration(seconds: 10));
+
+      final body = _decodeJson(ordersRes.body);
+      if (ordersRes.statusCode == 200) {
+        final data = body['data'];
+        List<dynamic> orders = [];
+        if (data is Map && data['orders'] is List) {
+          orders = data['orders'] as List;
+        } else if (data is List) {
+          orders = data;
+        }
+
+        // Filter for pending_payment status with payment_proof_url
+        final pendingPayments = orders
+            .where((o) => 
+                o['status'] == 'pending_payment' && 
+                o['payment_proof_url'] != null &&
+                o['payment_proof_url'].toString().isNotEmpty)
+            .toList();
+
+        return List<Map<String, dynamic>>.from(
+          pendingPayments.map((e) => Map<String, dynamic>.from(e as Map)),
+        );
+      }
+      return [];
+    } catch (e) {
+      print('[getPendingPaymentOrders] Error: $e');
+      return [];
+    }
+  }
+
+  static Future<Map<String, dynamic>> verifyPayment(
+      String orderId, bool approved, String? reason) async {
+    try {
+      final token = await getAuthToken();
+      if (token == null) return {'success': false, 'error': 'Not logged in'};
+
+      final res = await http.post(
+        Uri.parse('$flaskBaseUrl/seller/orders/$orderId/verify-payment'),
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer $token',
+        },
+        body: jsonEncode({
+          'approved': approved,
+          if (reason != null) 'reason': reason,
+        }),
+      ).timeout(const Duration(seconds: 15));
+
+      final body = _decodeJson(res.body);
+      return {
+        'success': res.statusCode == 200,
+        'error': body['error']?.toString(),
+        'message': body['message']?.toString(),
+      };
+    } catch (e) {
+      return {'success': false, 'error': e.toString()};
+    }
+  }
 }

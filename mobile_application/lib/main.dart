@@ -27,7 +27,9 @@ import 'screens/buyer/wishlist_screen.dart';
 import 'screens/buyer/addresses_screen.dart';
 import 'screens/buyer/settings_screen.dart';
 import 'screens/buyer/order_summary_screen.dart';
+import 'screens/buyer/upload_payment_proof_screen.dart';
 import 'screens/rider/rider_dashboard_screen.dart';
+import 'screens/seller/seller_verify_payments_screen.dart';
 import 'screens/admin/admin_dashboard_screen.dart';
 
 void main() async {
@@ -79,6 +81,13 @@ class GrandeMarketplaceApp extends StatelessWidget {
           final orderId = ModalRoute.of(context)?.settings.arguments as String? ?? '';
           return OrderSummaryScreen(orderId: orderId);
         },
+        '/upload-payment-proof': (context) {
+          final args = ModalRoute.of(context)?.settings.arguments as Map<String, dynamic>?;
+          return UploadPaymentProofScreen(
+            orderId: args?['orderId'] ?? '',
+            totalAmount: args?['totalAmount'] ?? 0.0,
+          );
+        },
         '/seller-dashboard': (context) => const SellerDashboardScreen(),
        '/seller/products': (context) => const SellerProductsScreen(),
        '/seller/products/add': (context) => const SellerAddProductScreen(),
@@ -87,6 +96,7 @@ class GrandeMarketplaceApp extends StatelessWidget {
        '/seller/store': (context) => const SellerStoreProfileScreen(),
        '/seller/shipping': (context) => const SellerShippingScreen(),
        '/seller/reviews': (context) => const SellerReviewsScreen(),
+       '/seller/verify-payments': (context) => const SellerVerifyPaymentsScreen(),
         '/rider-dashboard': (context) => const RiderDashboardScreen(),
         '/admin-dashboard': (context) => const AdminDashboardScreen(),
       },

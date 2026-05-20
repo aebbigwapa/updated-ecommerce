@@ -2,6 +2,8 @@ from models.order_model import OrderModel
 from models.product_model import ProductModel
 from models.user_model import UserModel
 from models.notification_model import NotificationModel
+from services.shipping_calculator import ShippingFeeCalculator
+import math
 
 class OrderService:
     """Handles order-related business logic"""
@@ -10,11 +12,11 @@ class OrderService:
         self.order_model = OrderModel()
         self.product_model = ProductModel()
     
-    def create_order(self, buyer_id, items, address, payment_method='cod'):
-        """Create a new order with proper stock validation"""
+    def create_order(self, buyer_id, items, address, payment_method='cod', distance_km=0):
+        """Create a new order with proper stock validation and shipping fee"""
         # Validate and calculate totals
         validated_items = []
-        total_amount = 0
+        subtotal = 0
         
         for item in items:
             product_id = item.get('product_id')
@@ -37,7 +39,7 @@ class OrderService:
             # Calculate item total
             item_price = float(product.get('price', 0))
             item_total = item_price * quantity
-            total_amount += item_total
+            subtotal += item_total
             
             validated_items.append({
                 'product_id': product_id,
@@ -50,12 +52,24 @@ class OrderService:
         if len(validated_items) == 0:
             return {'success': False, 'error': 'No valid items in order.'}
         
+        # Calculate shipping fee
+        shipping_fee = ShippingFeeCalculator.calculate(distance_km)
+        total_amount = subtotal + shipping_fee
+        
+        # Determine initial status based on payment method
+        if payment_method == 'gcash':
+            initial_status = 'pending_payment'  # Wait for payment proof
+        else:
+            initial_status = 'pending'  # COD or other methods
+        
         # Create order with stock reservation
         try:
             order_data = {
                 'buyer_id': buyer_id,
                 'total_amount': total_amount,
-                'status': 'pending',
+                'shipping_fee': shipping_fee,
+                'distance_km': distance_km,
+                'status': initial_status,
                 'payment_method': payment_method,
                 'shipping_address': address
             }
@@ -97,7 +111,10 @@ class OrderService:
             return {
                 'success': True,
                 'message': 'Order created successfully! Stock has been reserved.',
-                'order': order
+                'order': order,
+                'subtotal': subtotal,
+                'shipping_fee': shipping_fee,
+                'total': total_amount
             }
         except Exception as e:
             return {'success': False, 'error': str(e)}
@@ -130,3 +147,21 @@ class OrderService:
     def get_cart(self, buyer_id):
         """Get buyer cart from the database."""
         return self.order_model.get_cart_items(buyer_id)
+    
+    def calculate_distance(self, lat1, lon1, lat2, lon2):
+        """Calculate distance between two coordinates using Haversine formula"""
+        if not all([lat1, lon1, lat2, lon2]):
+            return 10  # Default 10km if coordinates missing
+        
+        R = 6371  # Earth's radius in kilometers
+        
+        lat1_rad = math.radians(float(lat1))
+        lat2_rad = math.radians(float(lat2))
+        delta_lat = math.radians(float(lat2) - float(lat1))
+        delta_lon = math.radians(float(lon2) - float(lon1))
+        
+        a = math.sin(delta_lat/2)**2 + math.cos(lat1_rad) * math.cos(lat2_rad) * math.sin(delta_lon/2)**2
+        c = 2 * math.asin(math.sqrt(a))
+        
+        distance = R * c
+        return round(distance, 2)
