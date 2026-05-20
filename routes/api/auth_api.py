@@ -177,6 +177,7 @@ def api_send_otp():
     try:
         import secrets
         import os
+        import traceback
         from datetime import datetime, timezone, timedelta
         from supabase import create_client
 
