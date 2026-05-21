@@ -28,6 +28,10 @@ import 'screens/buyer/addresses_screen.dart';
 import 'screens/buyer/settings_screen.dart';
 import 'screens/buyer/order_summary_screen.dart';
 import 'screens/buyer/upload_payment_proof_screen.dart';
+import 'screens/buyer/about_screen.dart';
+import 'screens/buyer/terms_screen.dart';
+import 'screens/buyer/privacy_screen.dart';
+import 'screens/buyer/help_screen.dart';
 import 'screens/rider/rider_dashboard_screen.dart';
 import 'screens/seller/seller_verify_payments_screen.dart';
 import 'screens/admin/admin_dashboard_screen.dart';
@@ -45,6 +49,7 @@ class GrandeMarketplaceApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return MaterialApp(
       title: 'Grande Marketplace',
+      debugShowCheckedModeBanner: false,
       theme: AppTheme.theme,
       initialRoute: '/auth',
       routes: {
@@ -99,6 +104,10 @@ class GrandeMarketplaceApp extends StatelessWidget {
        '/seller/verify-payments': (context) => const SellerVerifyPaymentsScreen(),
         '/rider-dashboard': (context) => const RiderDashboardScreen(),
         '/admin-dashboard': (context) => const AdminDashboardScreen(),
+        '/about': (context) => const AboutScreen(),
+        '/terms': (context) => const TermsScreen(),
+        '/privacy': (context) => const PrivacyScreen(),
+        '/help': (context) => const HelpScreen(),
       },
       onUnknownRoute: (settings) {
         return MaterialPageRoute(

@@ -6,6 +6,10 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../../theme/app_theme.dart';
 import '../../services/api_service.dart';
 import '../../widgets/grande_navbar.dart';
+import 'about_screen.dart';
+import 'help_screen.dart';
+import 'terms_screen.dart';
+import 'privacy_screen.dart';
 
 class ProfileScreen extends StatefulWidget {
   const ProfileScreen({super.key});
@@ -358,12 +362,26 @@ class _ProfileScreenState extends State<ProfileScreen> {
             _buildMenuItem(
               icon: Icons.help_outline,
               label: 'Help & Support',
-              onTap: () {},
+              onTap: () => Navigator.push(context,
+                  MaterialPageRoute(builder: (_) => const HelpScreen())),
             ),
             _buildMenuItem(
               icon: Icons.info_outline,
               label: 'About Grande',
-              onTap: () {},
+              onTap: () => Navigator.push(context,
+                  MaterialPageRoute(builder: (_) => const AboutScreen())),
+            ),
+            _buildMenuItem(
+              icon: Icons.description_outlined,
+              label: 'Terms & Conditions',
+              onTap: () => Navigator.push(context,
+                  MaterialPageRoute(builder: (_) => const TermsScreen())),
+            ),
+            _buildMenuItem(
+              icon: Icons.privacy_tip_outlined,
+              label: 'Privacy Policy',
+              onTap: () => Navigator.push(context,
+                  MaterialPageRoute(builder: (_) => const PrivacyScreen())),
             ),
           ]),
 

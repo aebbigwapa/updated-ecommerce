@@ -101,6 +101,22 @@ def market():
 def product():
     return render_template('buyer/product.html')
 
+@buyer_bp.route('/about')
+def about():
+    return render_template('buyer/about.html')
+
+@buyer_bp.route('/terms')
+def terms():
+    return render_template('buyer/terms.html')
+
+@buyer_bp.route('/privacy')
+def privacy():
+    return render_template('buyer/privacy.html')
+
+@buyer_bp.route('/help')
+def help_support():
+    return render_template('buyer/help.html')
+
 @buyer_bp.route('/api/products', methods=['GET'])
 def api_buyer_products():
     try:

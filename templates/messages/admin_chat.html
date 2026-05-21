@@ -4,58 +4,23 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="csrf-token" content="{{ csrf_token() }}">
-    <title>Support Inbox — Admin</title>
+    <title>Chat Support — Grande Admin</title>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/dashboard.css') }}">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/admin.css') }}">
-    <style>
-        .chat-shell { display: flex; height: calc(100vh - 60px); overflow: hidden; }
-        .conv-sidebar { width: 300px; flex-shrink: 0; background: #fff; border-right: 1px solid #e8e8f0; display: flex; flex-direction: column; }
-        .conv-header { padding: 14px 16px; border-bottom: 1px solid #f0f0f0; }
-        .conv-header h3 { font-size: 16px; font-weight: 700; color: #1a1a3e; margin: 0 0 10px; }
-        .role-filters { display: flex; gap: 6px; flex-wrap: wrap; }
-        .rf-btn { padding: 3px 10px; border: 1px solid #e8e8f0; border-radius: 12px; font-size: 11px; cursor: pointer; background: #fff; transition: all .2s; }
-        .rf-btn.active { background: #1a1a3e; color: #fff; border-color: #1a1a3e; }
-        .conv-search { padding: 8px 12px; border-bottom: 1px solid #f0f0f0; }
-        .conv-search input { width: 100%; padding: 7px 12px; border: 1px solid #e8e8f0; border-radius: 16px; font-size: 12px; outline: none; background: #f8f9fa; }
-        .conv-list { flex: 1; overflow-y: auto; }
-        .conv-item { display: flex; align-items: center; gap: 10px; padding: 10px 14px; cursor: pointer; border-bottom: 1px solid #f8f9fa; transition: background .15s; }
-        .conv-item:hover { background: #f8f9fa; }
-        .conv-item.active { background: #fff0f8; }
-        .conv-avatar { width: 38px; height: 38px; border-radius: 50%; background: linear-gradient(135deg,#1a1a3e,#2d2d6e); display: flex; align-items: center; justify-content: center; font-size: 15px; color: #fff; font-weight: 700; flex-shrink: 0; }
-        .conv-info { flex: 1; min-width: 0; }
-        .conv-name { font-size: 13px; font-weight: 600; color: #1a1a3e; }
-        .conv-preview { font-size: 11px; color: #6c757d; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-        .conv-badge { background: #FF2BAC; color: #fff; font-size: 10px; font-weight: 700; min-width: 16px; height: 16px; border-radius: 8px; padding: 0 3px; display: inline-flex; align-items: center; justify-content: center; }
-        .role-badge { font-size: 10px; padding: 1px 5px; border-radius: 3px; font-weight: 600; }
-        .role-buyer { background: #e3f2fd; color: #1565c0; }
-        .role-seller { background: #f3e5f5; color: #6a1b9a; }
-        .role-rider { background: #e8f5e9; color: #2e7d32; }
-
-        .chat-window { flex: 1; display: flex; flex-direction: column; background: #f0f2f5; }
-        .chat-empty { flex: 1; display: flex; align-items: center; justify-content: center; color: #adb5bd; flex-direction: column; gap: 8px; }
-        .chat-topbar { background: #fff; padding: 12px 20px; border-bottom: 1px solid #e8e8f0; display: flex; align-items: center; gap: 12px; }
-        .chat-topbar-avatar { width: 36px; height: 36px; border-radius: 50%; background: linear-gradient(135deg,#1a1a3e,#2d2d6e); display: flex; align-items: center; justify-content: center; font-size: 14px; color: #fff; font-weight: 700; }
-        .chat-topbar-name { font-size: 14px; font-weight: 600; color: #1a1a3e; }
-        .chat-messages { flex: 1; overflow-y: auto; padding: 16px; display: flex; flex-direction: column; gap: 8px; }
-        .msg-row { display: flex; align-items: flex-end; gap: 8px; }
-        .msg-row.sent { flex-direction: row-reverse; }
-        .msg-avatar { width: 26px; height: 26px; border-radius: 50%; background: linear-gradient(135deg,#FF2BAC,#FF9ED6); display: flex; align-items: center; justify-content: center; font-size: 11px; color: #fff; font-weight: 700; flex-shrink: 0; }
-        .msg-bubble { max-width: 60%; padding: 9px 13px; border-radius: 16px; font-size: 13px; line-height: 1.4; word-break: break-word; }
-        .msg-row.received .msg-bubble { background: #fff; color: #1a1a3e; border-bottom-left-radius: 3px; box-shadow: 0 1px 3px rgba(0,0,0,.06); }
-        .msg-row.sent .msg-bubble { background: #1a1a3e; color: #fff; border-bottom-right-radius: 3px; }
-        .msg-time { font-size: 10px; color: #adb5bd; margin-top: 3px; }
-        .msg-row.sent .msg-time { text-align: right; }
-        .chat-input-area { background: #fff; padding: 10px 14px; border-top: 1px solid #e8e8f0; display: flex; gap: 8px; align-items: flex-end; }
-        .chat-input { flex: 1; border: 1px solid #e8e8f0; border-radius: 20px; padding: 9px 14px; font-size: 13px; outline: none; resize: none; max-height: 100px; font-family: inherit; }
-        .chat-input:focus { border-color: #1a1a3e; }
-        .chat-send-btn { width: 38px; height: 38px; border-radius: 50%; background: #1a1a3e; border: none; cursor: pointer; display: flex; align-items: center; justify-content: center; font-size: 16px; color: #fff; flex-shrink: 0; }
-        .chat-send-btn:hover { background: #2d2d6e; }
-    </style>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/admin_chat.css') }}">
 </head>
 <body>
 
+<!-- ── Mobile block (shown on screens < 900px) ─────────────── -->
+<div class="mobile-block">
+    <div class="mb-icon">🖥️</div>
+    <h2>Desktop Only</h2>
+    <p>The Chat Support Management Panel is only available on desktop. Please switch to a desktop or laptop to access this feature.</p>
+</div>
+
+<!-- ── Admin sidebar ────────────────────────────────────────── -->
 <div id="sidebarOverlay"></div>
 <button class="sidebar-toggle" id="sidebarToggle">&#9776;</button>
 
@@ -72,7 +37,7 @@
         <li><a href="/admin/products"><span class="icon">📦</span> Products</a></li>
         <li><a href="/admin/orders"><span class="icon">🛒</span> Orders</a></li>
         <li class="menu-group">SUPPORT</li>
-        <li><a href="/messages/admin" class="active"><span class="icon">💬</span> Messages</a></li>
+        <li><a href="/messages/admin" class="active"><span class="icon">💬</span> Chat Support</a></li>
         <li class="menu-group">SYSTEM</li>
         <li><a href="/admin/reports"><span class="icon">🚩</span> Reports</a></li>
         <li><a href="/admin/settings"><span class="icon">⚙️</span> Settings</a></li>
@@ -83,225 +48,640 @@
     </div>
 </aside>
 
+<!-- ── Main content ──────────────────────────────────────────── -->
 <div class="main" style="padding:0;">
     <div class="topbar">
-        <div class="topbar-title">Support Inbox</div>
-        <div class="topbar-right" id="unreadBadge">Admin Panel</div>
+        <div class="topbar-title">Chat Support Management</div>
+        <div class="topbar-right" style="display:flex;align-items:center;gap:12px;">
+            <span id="totalUnreadBadge" style="display:none;background:#FF2BAC;color:#fff;font-size:11px;font-weight:700;padding:3px 10px;border-radius:12px;"></span>
+            <span id="syncIndicator"><span class="sync-dot"></span><span class="sync-text">Live</span></span>
+        </div>
     </div>
 
     <div class="chat-shell">
-        <!-- Sidebar -->
+
+        <!-- ── Left: Conversation list ──────────────────────── -->
         <div class="conv-sidebar">
+
             <div class="conv-header">
-                <h3>All Conversations</h3>
+                <div class="conv-header-top">
+                    <h3>All Conversations</h3>
+                    <button class="new-conv-btn" onclick="openNewConvModal()">+ New Chat</button>
+                </div>
                 <div class="role-filters">
-                    <button class="rf-btn active" onclick="filterRole('all', this)">All</button>
-                    <button class="rf-btn" onclick="filterRole('buyer', this)">Buyers</button>
-                    <button class="rf-btn" onclick="filterRole('seller', this)">Sellers</button>
-                    <button class="rf-btn" onclick="filterRole('rider', this)">Riders</button>
+                    <button class="rf-btn active" data-role="all"    onclick="setRoleFilter('all',this)">All</button>
+                    <button class="rf-btn"        data-role="buyer"  onclick="setRoleFilter('buyer',this)">Buyers</button>
+                    <button class="rf-btn"        data-role="seller" onclick="setRoleFilter('seller',this)">Sellers</button>
+                    <button class="rf-btn"        data-role="rider"  onclick="setRoleFilter('rider',this)">Riders</button>
+                    <button class="rf-btn"        data-role="unread" onclick="setRoleFilter('unread',this)">Unread</button>
                 </div>
             </div>
-            <div class="conv-search">
-                <input type="text" id="convSearch" placeholder="Search…" oninput="filterSearch()">
+
+            <div class="stats-bar" id="statsBar">
+                <span>Total: <strong id="statTotal">—</strong></span>
+                <span>Unread: <strong id="statUnread">—</strong></span>
             </div>
-            <div class="conv-list" id="convList"><div style="padding:20px;text-align:center;color:#adb5bd;font-size:13px">Loading…</div></div>
+
+            <div class="conv-search">
+                <input type="text" id="convSearch" placeholder="Search by name or message…" oninput="renderConvList()">
+            </div>
+
+            <div class="conv-list" id="convList">
+                <div class="conv-empty-msg">Loading conversations…</div>
+            </div>
         </div>
 
-        <!-- Chat window -->
+        <!-- ── Right: Chat window ────────────────────────────── -->
         <div class="chat-window">
+
+            <!-- Empty state -->
             <div class="chat-empty" id="chatEmpty">
-                <div style="font-size:40px">💬</div>
-                <p style="font-size:14px">Select a conversation to respond</p>
+                <div class="ce-icon">💬</div>
+                <h4>Select a Conversation</h4>
+                <p>Choose a user from the left panel to view and reply to their messages.</p>
             </div>
+
+            <!-- Active chat -->
             <div id="chatActive" style="display:none;flex-direction:column;height:100%;">
+
                 <div class="chat-topbar">
-                    <div class="chat-topbar-avatar" id="chatTopAvatar">?</div>
-                    <div>
-                        <div class="chat-topbar-name" id="chatTopName">—</div>
-                        <div id="chatTopMeta" style="font-size:11px;color:#6c757d"></div>
+                    <div class="chat-topbar-avatar" id="topAvatar">?</div>
+                    <div class="chat-topbar-info">
+                        <div class="chat-topbar-name" id="topName">—</div>
+                        <div class="chat-topbar-sub" id="topSub"></div>
+                    </div>
+                    <div class="chat-topbar-actions">
+                        <button class="topbar-action-btn" onclick="refreshMessages()" title="Refresh">↻ Refresh</button>
+                        <button class="topbar-action-btn" onclick="clearActiveChat()" title="Close">✕ Close</button>
                     </div>
                 </div>
-                <div class="chat-messages" id="chatMessages"></div>
+
+                <div class="chat-messages" id="chatMessages">
+                    <div class="msg-loading"><div class="spinner"></div> Loading messages…</div>
+                </div>
+
+                <div class="typing-row" id="typingRow" style="display:none;padding:0 20px 8px;">
+                    <div class="msg-avatar-sm"><span>U</span></div>
+                    <div class="typing-dots">
+                        <span></span><span></span><span></span>
+                    </div>
+                </div>
+
                 <div class="chat-input-area">
-                    <textarea class="chat-input" id="chatInput" rows="1" placeholder="Reply as support…"
-                        onkeydown="handleKey(event)" oninput="autoResize(this)"></textarea>
-                    <button class="chat-send-btn" onclick="sendMessage()">➤</button>
+                    <textarea
+                        class="chat-input"
+                        id="chatInput"
+                        rows="1"
+                        placeholder="Reply as Grande Support…"
+                        onkeydown="handleKey(event)"
+                        oninput="autoResize(this)"
+                    ></textarea>
+                    <button class="chat-send-btn" id="sendBtn" onclick="sendMessage()" title="Send (Enter)">➤</button>
                 </div>
             </div>
         </div>
     </div>
 </div>
 
-<div class="toast" id="toast"></div>
+<!-- ── New Conversation Modal ────────────────────────────────── -->
+<div class="modal-overlay" id="newConvModal">
+    <div class="modal-box">
+        <h3>Start New Conversation</h3>
+        <p class="modal-sub">Select a user to open a support chat with them.</p>
+
+        <div class="modal-role-tabs">
+            <button class="modal-role-tab active" data-role="all"    onclick="setModalRole('all',this)">All</button>
+            <button class="modal-role-tab"        data-role="buyer"  onclick="setModalRole('buyer',this)">Buyers</button>
+            <button class="modal-role-tab"        data-role="seller" onclick="setModalRole('seller',this)">Sellers</button>
+            <button class="modal-role-tab"        data-role="rider"  onclick="setModalRole('rider',this)">Riders</button>
+        </div>
+
+        <div class="modal-search-wrap">
+            <span class="search-icon">🔍</span>
+            <input type="text" id="modalSearch" placeholder="Search by name or email…" oninput="renderModalUsers()">
+        </div>
+
+        <div class="modal-user-list" id="modalUserList">
+            <div class="modal-loading">Loading users…</div>
+        </div>
+
+        <div class="modal-actions">
+            <button class="btn-cancel" onclick="closeNewConvModal()">Cancel</button>
+            <button class="btn-start" id="btnStartChat" onclick="startNewConversation()" disabled>Start Chat</button>
+        </div>
+    </div>
+</div>
+
+<!-- ── Toast ─────────────────────────────────────────────────── -->
+<div class="ac-toast" id="acToast"></div>
+
 <script src="{{ url_for('static', filename='js/api.js') }}"></script>
 <script src="{{ url_for('static', filename='js/admin.js') }}"></script>
 <script>
-const ME = {{ session.user | tojson }};
-let activeConvId = null;
-let allConvs = [];
-let roleFilter = 'all';
-let pollTimer = null;
-let lastMsgId = null;
+/* ============================================================
+   GRANDE ADMIN CHAT PANEL
+   Real-time support inbox for admin ↔ user messaging
+   ============================================================ */
 
+const ME = {{ session.user | tojson | safe }};
+
+// ── State ──────────────────────────────────────────────────
+let allConvs      = [];
+let roleFilter    = 'all';
+let activeConvId  = null;
+let lastMsgId     = null;
+let pollTimer     = null;
+let convPollTimer = null;
+let allUsers      = [];
+let modalRoleFilter = 'all';
+let selectedUserId  = null;
+let isSending       = false;
+
+// ── Init ───────────────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', () => {
     loadConversations();
+    // Poll conversation list every 8s for new incoming chats
+    convPollTimer = setInterval(loadConversations, 8000);
+
+    // Auto-open from URL ?conv=id
     const params = new URLSearchParams(location.search);
-    if (params.get('conv')) setTimeout(() => openConversation(params.get('conv')), 500);
+    if (params.get('conv')) {
+        setTimeout(() => openConversation(params.get('conv')), 600);
+    }
 });
 
+// ── Load conversations ─────────────────────────────────────
 async function loadConversations() {
-    const res = await fetch('/messages/api/conversations').then(r => r.json()).catch(() => []);
-    allConvs = Array.isArray(res) ? res : [];
-    renderConvs();
-    const total = allConvs.reduce((s, c) => s + (c.unread_count || 0), 0);
-    const badge = document.getElementById('unreadBadge');
-    if (badge && total > 0) badge.textContent = `${total} unread`;
+    try {
+        const res = await fetch('/messages/api/conversations').then(r => r.json());
+        allConvs = Array.isArray(res) ? res : [];
+        renderConvList();
+        updateStats();
+    } catch (e) {
+        console.error('Failed to load conversations:', e);
+    }
 }
 
-    function renderConvs() {
-        const q = (document.getElementById('convSearch').value || '').toLowerCase();
-        let filtered = allConvs;
-        if (roleFilter !== 'all') {
-            filtered = filtered.filter(c => {
-                const p1 = c.participant_1_data || {}; const p2 = c.participant_2_data || {};
-                return p1.role === roleFilter || p2.role === roleFilter;
-            });
+function updateStats() {
+    const total  = allConvs.length;
+    const unread = allConvs.reduce((s, c) => s + (c.unread_count || 0), 0);
+    document.getElementById('statTotal').textContent  = total;
+    document.getElementById('statUnread').textContent = unread;
+
+    const badge = document.getElementById('totalUnreadBadge');
+    if (unread > 0) {
+        badge.textContent = unread + ' unread';
+        badge.style.display = 'inline-block';
+    } else {
+        badge.style.display = 'none';
+    }
+}
+
+// ── Render conversation list ───────────────────────────────
+function renderConvList() {
+    const q = (document.getElementById('convSearch').value || '').toLowerCase().trim();
+
+    let filtered = allConvs.filter(c => {
+        const p1 = c.participant_1_data || {};
+        const p2 = c.participant_2_data || {};
+
+        // Role filter
+        if (roleFilter === 'unread') {
+            if ((c.unread_count || 0) === 0) return false;
+        } else if (roleFilter !== 'all') {
+            const hasRole = p1.role === roleFilter || p2.role === roleFilter;
+            if (!hasRole) return false;
         }
+
+        // Search filter
         if (q) {
-            filtered = filtered.filter(c => {
-                const p1 = c.participant_1_data || {}; const p2 = c.participant_2_data || {};
-                const n1 = `${p1.first_name||''} ${p1.last_name||''}`.toLowerCase();
-                const n2 = `${p2.first_name||''} ${p2.last_name||''}`.toLowerCase();
-                return n1.includes(q) || n2.includes(q) || (c.last_message||'').toLowerCase().includes(q);
-            });
+            const n1 = `${p1.first_name||''} ${p1.last_name||''}`.toLowerCase();
+            const n2 = `${p2.first_name||''} ${p2.last_name||''}`.toLowerCase();
+            const preview = (c.last_message || '').toLowerCase();
+            if (!n1.includes(q) && !n2.includes(q) && !preview.includes(q)) return false;
         }
-        const list = document.getElementById('convList');
-        if (!filtered.length) { list.innerHTML = '<div style="padding:20px;text-align:center;color:#adb5bd;font-size:13px">No conversations found.</div>'; return; }
-        list.innerHTML = filtered.map(c => {
-            const p1 = c.participant_1_data || {}; const p2 = c.participant_2_data || {};
-            const n1 = `${p1.first_name||''} ${p1.last_name||''}`.trim();
-            const n2 = `${p2.first_name||''} ${p2.last_name||''}`.trim();
-            const label = `${n1} ↔ ${n2}`;
-            const unread = c.unread_count || 0;
-            return `
-        <div class="conv-item ${c.id === activeConvId ? 'active' : ''}" onclick="openConversation('${c.id}')">
-            <div class="conv-avatar">${(n1[0]||'?').toUpperCase()}</div>
-            <div class="conv-info">
-                <div class="conv-name">
-                    ${n1} <span class="role-badge role-${p1.role||''}">${p1.role||''}</span>
-                    ↔ ${n2} <span class="role-badge role-${p2.role||''}">${p2.role||''}</span>
-                </div>
-                <div class="conv-preview">${c.last_message || 'No messages yet'}</div>
-            </div>
-            ${unread > 0 ? `<span class="conv-badge">${unread}</span>` : ''}
+        return true;
+    });
+
+    const list = document.getElementById('convList');
+
+    if (!filtered.length) {
+        list.innerHTML = `<div class="conv-empty-msg">
+            ${q || roleFilter !== 'all' ? 'No conversations match your filter.' : 'No conversations yet.'}
         </div>`;
-        }).join('');
+        return;
     }
 
-function filterRole(role, btn) {
+    list.innerHTML = filtered.map(c => {
+        const p1 = c.participant_1_data || {};
+        const p2 = c.participant_2_data || {};
+
+        // Show the non-admin participant as the "user"
+        const user = (p1.role !== 'admin') ? p1 : p2;
+        const name = `${user.first_name||''} ${user.last_name||''}`.trim() || 'Unknown User';
+        const initial = name[0]?.toUpperCase() || '?';
+        const role  = user.role || '';
+        const unread = c.unread_count || 0;
+        const time  = c.updated_at ? timeAgo(c.updated_at) : '';
+        const preview = esc(c.last_message || 'No messages yet');
+        const isActive = c.id === activeConvId;
+        const avatarHtml = user.profile_picture
+            ? `<img src="${user.profile_picture}" alt="${name}">`
+            : initial;
+
+        return `
+        <div class="conv-item ${isActive ? 'active' : ''}" onclick="openConversation('${c.id}')" data-id="${c.id}">
+            <div class="conv-avatar">${avatarHtml}</div>
+            <div class="conv-info">
+                <div class="conv-name-row">
+                    <span class="conv-name">${name}</span>
+                    <span class="role-badge role-${role}">${role}</span>
+                </div>
+                <div class="conv-preview">${unread > 0 ? '<strong>' : ''}${preview}${unread > 0 ? '</strong>' : ''}</div>
+            </div>
+            <div class="conv-meta">
+                <span class="conv-time">${time}</span>
+                ${unread > 0 ? `<span class="conv-badge">${unread}</span>` : ''}
+            </div>
+        </div>`;
+    }).join('');
+}
+
+function setRoleFilter(role, btn) {
     roleFilter = role;
     document.querySelectorAll('.rf-btn').forEach(b => b.classList.remove('active'));
     btn.classList.add('active');
-    renderConvs();
+    renderConvList();
 }
 
-function filterSearch() { renderConvs(); }
+// ── Open conversation ──────────────────────────────────────
+async function openConversation(convId) {
+    if (activeConvId === convId) return;
 
-    async function openConversation(convId) {
-        activeConvId = convId;
-        clearInterval(pollTimer);
-        lastMsgId = null;
-        document.querySelectorAll('.conv-item').forEach(el => el.classList.remove('active'));
+    // Stop previous poll
+    clearInterval(pollTimer);
+    lastMsgId = null;
+    activeConvId = convId;
 
-        const conv = allConvs.find(c => c.id === convId);
-        const p1 = conv ? (conv.participant_1_data || {}) : {};
-        const p2 = conv ? (conv.participant_2_data || {}) : {};
-        const n1 = `${p1.first_name||''} ${p1.last_name||''}`.trim();
-        const n2 = `${p2.first_name||''} ${p2.last_name||''}`.trim();
+    // Update sidebar highlight
+    document.querySelectorAll('.conv-item').forEach(el => {
+        el.classList.toggle('active', el.dataset.id === convId);
+    });
 
-        document.getElementById('chatTopAvatar').textContent = (n1[0]||'?').toUpperCase();
-        document.getElementById('chatTopName').textContent = `${n1} ↔ ${n2}`;
-        document.getElementById('chatTopMeta').innerHTML =
-            '<span class="role-badge role-' + (p1.role||'') + '">' + (p1.role||'') + '</span> &nbsp;
-            <span class="role-badge role-' + (p2.role||'') + '">' + (p2.role||'') + '</span>';
+    // Find conv data
+    const conv = allConvs.find(c => c.id === convId);
+    const p1   = conv?.participant_1_data || {};
+    const p2   = conv?.participant_2_data || {};
+    const user = (p1.role !== 'admin') ? p1 : p2;
+    const name = `${user.first_name||''} ${user.last_name||''}`.trim() || 'Unknown User';
+    const role = user.role || '';
 
-        document.getElementById('chatEmpty').style.display = 'none';
-        document.getElementById('chatActive').style.display = 'flex';
-
-        await loadMessages(convId);
-        pollTimer = setInterval(() => pollMessages(convId), 3000);
-        history.replaceState(null, '', `/messages/admin?conv=${convId}`);
-        renderConvs();
+    // Update topbar
+    const topAv = document.getElementById('topAvatar');
+    if (user.profile_picture) {
+        topAv.innerHTML = `<img src="${user.profile_picture}" alt="${name}">`;
+    } else {
+        topAv.textContent = name[0]?.toUpperCase() || '?';
     }
+    document.getElementById('topName').textContent = name;
+    document.getElementById('topSub').innerHTML =
+        `<span class="role-badge role-${role}">${role}</span>
+         <span style="color:#adb5bd">·</span>
+         <span>${user.email || ''}</span>`;
 
+    // Show chat panel
+    document.getElementById('chatEmpty').style.display  = 'none';
+    const chatActive = document.getElementById('chatActive');
+    chatActive.style.display = 'flex';
+
+    // Show loading
+    document.getElementById('chatMessages').innerHTML =
+        '<div class="msg-loading"><div class="spinner"></div> Loading messages…</div>';
+
+    // Load messages
+    await loadMessages(convId);
+
+    // Start polling every 3s
+    pollTimer = setInterval(() => pollMessages(convId), 3000);
+
+    // Update URL
+    history.replaceState(null, '', `/messages/admin?conv=${convId}`);
+}
+
+// ── Load messages ──────────────────────────────────────────
 async function loadMessages(convId) {
-    const msgs = await fetch(`/messages/api/conversations/${convId}/messages`).then(r => r.json()).catch(() => []);
-    renderMessages(msgs);
-    if (msgs.length) lastMsgId = msgs[msgs.length - 1].id;
-    scrollBottom();
-    loadConversations();
-}
-
-async function pollMessages(convId) {
-    if (!lastMsgId) return;
-    const msgs = await fetch(`/messages/api/conversations/${convId}/messages?after=${lastMsgId}`).then(r => r.json()).catch(() => []);
-    if (msgs.length) {
-        msgs.forEach(m => document.getElementById('chatMessages').appendChild(buildMsg(m)));
-        lastMsgId = msgs[msgs.length - 1].id;
+    try {
+        const msgs = await fetch(`/messages/api/conversations/${convId}/messages`)
+            .then(r => r.json());
+        renderMessages(Array.isArray(msgs) ? msgs : []);
+        if (msgs.length) lastMsgId = msgs[msgs.length - 1].id;
         scrollBottom();
+        // Refresh sidebar to clear unread badge
         loadConversations();
+    } catch (e) {
+        document.getElementById('chatMessages').innerHTML =
+            '<div class="msg-loading" style="color:#dc3545">Failed to load messages.</div>';
     }
 }
 
-function renderMessages(msgs) {
-    const c = document.getElementById('chatMessages');
-    c.innerHTML = '';
-    msgs.forEach(m => c.appendChild(buildMsg(m)));
+// ── Poll for new messages ──────────────────────────────────
+async function pollMessages(convId) {
+    if (!lastMsgId || activeConvId !== convId) return;
+    try {
+        const msgs = await fetch(
+            `/messages/api/conversations/${convId}/messages?after=${lastMsgId}`
+        ).then(r => r.json());
+        if (Array.isArray(msgs) && msgs.length) {
+            const container = document.getElementById('chatMessages');
+            msgs.forEach(m => container.appendChild(buildMsgEl(m)));
+            lastMsgId = msgs[msgs.length - 1].id;
+            scrollBottom();
+            loadConversations();
+        }
+    } catch (_) {}
 }
 
-function buildMsg(m) {
-    const isSent = m.sender_id === ME.id;
-    const sender = m.sender || {};
+// ── Render all messages ────────────────────────────────────
+function renderMessages(msgs) {
+    const container = document.getElementById('chatMessages');
+    container.innerHTML = '';
+
+    if (!msgs.length) {
+        container.innerHTML = '<div class="conv-empty-msg" style="padding:40px">No messages yet. Send the first message below.</div>';
+        return;
+    }
+
+    let lastDate = null;
+    msgs.forEach(m => {
+        const d = new Date(m.created_at).toDateString();
+        if (d !== lastDate) {
+            const div = document.createElement('div');
+            div.className = 'msg-date-divider';
+            div.textContent = d === new Date().toDateString() ? 'Today' : d;
+            container.appendChild(div);
+            lastDate = d;
+        }
+        container.appendChild(buildMsgEl(m));
+    });
+}
+
+// ── Build message element ──────────────────────────────────
+function buildMsgEl(m) {
+    const isSent  = m.sender_id === ME.id;
+    const sender  = m.sender || {};
     const initial = (sender.first_name || '?')[0].toUpperCase();
+    const isRead  = m.is_read;
+
     const row = document.createElement('div');
     row.className = `msg-row ${isSent ? 'sent' : 'received'}`;
+    row.dataset.msgId = m.id;
+
+    const avatarHtml = sender.profile_picture
+        ? `<img src="${sender.profile_picture}" alt="${initial}">`
+        : initial;
+
     row.innerHTML = `
-        ${!isSent ? `<div class="msg-avatar">${initial}</div>` : ''}
-        <div>
+        <div class="msg-avatar-sm ${isSent ? 'admin-av' : ''}">${avatarHtml}</div>
+        <div class="msg-body">
             <div class="msg-bubble">${esc(m.content)}</div>
-            <div class="msg-time">${fmtTime(m.created_at)}</div>
+            <div class="msg-footer">
+                <span class="msg-time">${fmtTime(m.created_at)}</span>
+                ${isSent ? `<span class="msg-status ${isRead ? 'read' : ''}">${isRead ? '✓✓' : '✓'}</span>` : ''}
+            </div>
         </div>
-        ${isSent ? `<div class="msg-avatar" style="background:linear-gradient(135deg,#1a1a3e,#2d2d6e)">${initial}</div>` : ''}
     `;
     return row;
 }
 
+// ── Send message ───────────────────────────────────────────
 async function sendMessage() {
-    if (!activeConvId) return;
-    const input = document.getElementById('chatInput');
+    if (!activeConvId || isSending) return;
+    const input   = document.getElementById('chatInput');
     const content = input.value.trim();
     if (!content) return;
+
+    isSending = true;
     input.value = '';
     autoResize(input);
-    const res = await fetch(`/messages/api/conversations/${activeConvId}/messages`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': csrfToken() },
-        body: JSON.stringify({ content })
-    }).then(r => r.json()).catch(() => null);
-    if (res?.id) {
-        document.getElementById('chatMessages').appendChild(buildMsg(res));
-        lastMsgId = res.id;
-        scrollBottom();
-        loadConversations();
+    document.getElementById('sendBtn').disabled = true;
+
+    try {
+        const res = await fetch(`/messages/api/conversations/${activeConvId}/messages`, {
+            method:  'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRF-Token': csrfToken()
+            },
+            body: JSON.stringify({ content })
+        }).then(r => r.json());
+
+        if (res && res.id) {
+            const container = document.getElementById('chatMessages');
+            container.appendChild(buildMsgEl(res));
+            lastMsgId = res.id;
+            scrollBottom();
+            loadConversations();
+        } else {
+            showToast('Failed to send message.', true);
+            input.value = content; // restore
+        }
+    } catch (e) {
+        showToast('Network error. Please try again.', true);
+        input.value = content;
+    } finally {
+        isSending = false;
+        document.getElementById('sendBtn').disabled = false;
+        input.focus();
     }
 }
 
-function handleKey(e) { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage(); } }
-function autoResize(el) { el.style.height = 'auto'; el.style.height = Math.min(el.scrollHeight, 100) + 'px'; }
-function scrollBottom() { const el = document.getElementById('chatMessages'); el.scrollTop = el.scrollHeight; }
-function csrfToken() { return document.querySelector('meta[name="csrf-token"]')?.content || ''; }
-function esc(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
-function fmtTime(iso) { return iso ? new Date(iso).toLocaleTimeString('en-PH',{hour:'2-digit',minute:'2-digit'}) : ''; }
+function handleKey(e) {
+    if (e.key === 'Enter' && !e.shiftKey) {
+        e.preventDefault();
+        sendMessage();
+    }
+}
+
+// ── Refresh / Close ────────────────────────────────────────
+async function refreshMessages() {
+    if (!activeConvId) return;
+    lastMsgId = null;
+    await loadMessages(activeConvId);
+}
+
+function clearActiveChat() {
+    clearInterval(pollTimer);
+    activeConvId = null;
+    lastMsgId    = null;
+    document.getElementById('chatEmpty').style.display  = 'flex';
+    document.getElementById('chatActive').style.display = 'none';
+    document.querySelectorAll('.conv-item').forEach(el => el.classList.remove('active'));
+    history.replaceState(null, '', '/messages/admin');
+}
+
+// ── New conversation modal ─────────────────────────────────
+async function openNewConvModal() {
+    selectedUserId = null;
+    document.getElementById('btnStartChat').disabled = true;
+    document.getElementById('modalSearch').value = '';
+    document.getElementById('newConvModal').classList.add('open');
+    await loadModalUsers();
+}
+
+function closeNewConvModal() {
+    document.getElementById('newConvModal').classList.remove('open');
+    selectedUserId = null;
+}
+
+async function loadModalUsers() {
+    document.getElementById('modalUserList').innerHTML =
+        '<div class="modal-loading">Loading users…</div>';
+    try {
+        const role = modalRoleFilter === 'all' ? '' : modalRoleFilter;
+        const url  = `/messages/api/users${role ? '?role=' + role : ''}`;
+        const res  = await fetch(url).then(r => r.json());
+        allUsers = Array.isArray(res) ? res : [];
+        renderModalUsers();
+    } catch (e) {
+        document.getElementById('modalUserList').innerHTML =
+            '<div class="modal-loading" style="color:#dc3545">Failed to load users.</div>';
+    }
+}
+
+function renderModalUsers() {
+    const q = (document.getElementById('modalSearch').value || '').toLowerCase().trim();
+    let users = allUsers;
+    if (q) {
+        users = users.filter(u => {
+            const name  = `${u.first_name||''} ${u.last_name||''}`.toLowerCase();
+            const email = (u.email || '').toLowerCase();
+            return name.includes(q) || email.includes(q);
+        });
+    }
+
+    const list = document.getElementById('modalUserList');
+    if (!users.length) {
+        list.innerHTML = '<div class="modal-loading">No users found.</div>';
+        return;
+    }
+
+    list.innerHTML = users.map(u => {
+        const name    = `${u.first_name||''} ${u.last_name||''}`.trim() || 'Unknown';
+        const initial = name[0]?.toUpperCase() || '?';
+        const role    = u.role || '';
+        const isSelected = u.id === selectedUserId;
+        const avatarHtml = u.profile_picture
+            ? `<img src="${u.profile_picture}" alt="${name}">`
+            : initial;
+
+        return `
+        <div class="modal-user-item ${isSelected ? 'selected' : ''}"
+             onclick="selectModalUser('${u.id}', this)"
+             data-uid="${u.id}">
+            <div class="modal-user-av">${avatarHtml}</div>
+            <div>
+                <div class="modal-user-name">
+                    ${name}
+                    <span class="role-badge role-${role}" style="margin-left:4px">${role}</span>
+                </div>
+                <div class="modal-user-email">${u.email || ''}</div>
+            </div>
+        </div>`;
+    }).join('');
+}
+
+function setModalRole(role, btn) {
+    modalRoleFilter = role;
+    document.querySelectorAll('.modal-role-tab').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    loadModalUsers();
+}
+
+function selectModalUser(uid, el) {
+    selectedUserId = uid;
+    document.querySelectorAll('.modal-user-item').forEach(i => i.classList.remove('selected'));
+    el.classList.add('selected');
+    document.getElementById('btnStartChat').disabled = false;
+}
+
+async function startNewConversation() {
+    if (!selectedUserId) return;
+    document.getElementById('btnStartChat').disabled = true;
+
+    try {
+        const res = await fetch('/messages/api/conversations/start', {
+            method:  'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRF-Token': csrfToken()
+            },
+            body: JSON.stringify({ user_id: selectedUserId })
+        }).then(r => r.json());
+
+        closeNewConvModal();
+
+        if (res && res.id) {
+            await loadConversations();
+            openConversation(res.id);
+        } else {
+            showToast('Failed to start conversation.', true);
+        }
+    } catch (e) {
+        showToast('Network error.', true);
+        document.getElementById('btnStartChat').disabled = false;
+    }
+}
+
+// ── Helpers ────────────────────────────────────────────────
+function scrollBottom() {
+    const el = document.getElementById('chatMessages');
+    if (el) el.scrollTop = el.scrollHeight;
+}
+
+function autoResize(el) {
+    el.style.height = 'auto';
+    el.style.height = Math.min(el.scrollHeight, 120) + 'px';
+}
+
+function csrfToken() {
+    return document.querySelector('meta[name="csrf-token"]')?.content || '';
+}
+
+function esc(s) {
+    return String(s)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/\n/g, '<br>');
+}
+
+function fmtTime(iso) {
+    if (!iso) return '';
+    return new Date(iso).toLocaleTimeString('en-PH', { hour: '2-digit', minute: '2-digit' });
+}
+
+function timeAgo(iso) {
+    const diff = Date.now() - new Date(iso);
+    const m = Math.floor(diff / 60000);
+    if (m < 1)    return 'now';
+    if (m < 60)   return m + 'm';
+    if (m < 1440) return Math.floor(m / 60) + 'h';
+    return Math.floor(m / 1440) + 'd';
+}
+
+function showToast(msg, isError = false) {
+    const t = document.getElementById('acToast');
+    t.textContent = msg;
+    t.className   = 'ac-toast' + (isError ? ' error' : '');
+    t.classList.add('show');
+    setTimeout(() => t.classList.remove('show'), 3500);
+}
+
+// Close modal on overlay click
+document.getElementById('newConvModal').addEventListener('click', function(e) {
+    if (e.target === this) closeNewConvModal();
+});
 </script>
 </body>
 </html>

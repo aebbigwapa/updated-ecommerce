@@ -218,6 +218,23 @@ class _LoginScreenState extends State<LoginScreen> {
                                   ),
                                 ],
                               ),
+                              const SizedBox(height: AppTheme.sm),
+                              Row(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  TextButton(
+                                    onPressed: () => Navigator.pushNamed(context, '/terms'),
+                                    child: const Text('Terms & Conditions',
+                                        style: TextStyle(fontSize: 11, color: AppTheme.textLight)),
+                                  ),
+                                  const Text('·', style: TextStyle(color: AppTheme.textLight)),
+                                  TextButton(
+                                    onPressed: () => Navigator.pushNamed(context, '/privacy'),
+                                    child: const Text('Privacy Policy',
+                                        style: TextStyle(fontSize: 11, color: AppTheme.textLight)),
+                                  ),
+                                ],
+                              ),
                             ],
                           ),
                         ),

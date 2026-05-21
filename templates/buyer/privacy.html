@@ -1,0 +1,138 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Grande — Privacy Policy</title>
+    <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;600;700&family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/shop.css') }}">
+    <style>
+        .info-hero { background: linear-gradient(135deg, #FF2BAC, #FF9ED6); border-radius: 16px; padding: 36px 32px; color: #fff; margin-bottom: 28px; }
+        .info-hero h1 { font-family: 'Playfair Display', serif; font-size: 32px; font-weight: 700; }
+        .info-hero p { font-size: 14px; opacity: .9; margin: 0; }
+        .info-card { background: #fff; border-radius: 12px; padding: 28px; box-shadow: 0 2px 8px rgba(0,0,0,.06); margin-bottom: 16px; }
+        .info-card h3 { font-family: 'Playfair Display', serif; font-size: 17px; font-weight: 600; color: #FF2BAC; border-bottom: 1px solid #f0f0f0; padding-bottom: 10px; margin-bottom: 14px; }
+        .info-card p, .info-card li { font-size: 14px; color: #4a5568; line-height: 1.8; }
+        .info-card ul { padding-left: 20px; }
+    </style>
+</head>
+<body>
+{% from 'buyer/_navbar.html' import grande_navbar %}
+{{ grande_navbar(user=session.get('user'), active='') }}
+
+<div class="container py-4" style="max-width:800px">
+
+    <div class="info-hero">
+        <h1>Privacy Policy</h1>
+        <p>Effective Date: January 1, 2025 &nbsp;·&nbsp; Your privacy matters to us. This policy explains how we collect, use, and protect your data.</p>
+    </div>
+
+    <div class="info-card">
+        <h3>1. Information We Collect</h3>
+        <p><strong>Personal Information:</strong></p>
+        <ul>
+            <li>Full name (first, middle, last)</li>
+            <li>Email address</li>
+            <li>Contact number</li>
+            <li>Home or delivery address</li>
+            <li>Gender and date of birth (where applicable)</li>
+        </ul>
+        <p class="mt-2"><strong>Account &amp; Transaction Data:</strong></p>
+        <ul>
+            <li>Login credentials (stored in encrypted form)</li>
+            <li>Order history and transaction records</li>
+            <li>Payment references and proof of payment</li>
+            <li>Product reviews and ratings</li>
+        </ul>
+        <p class="mt-2"><strong>Technical Data:</strong></p>
+        <ul>
+            <li>Device information and IP address</li>
+            <li>Browser type and operating system</li>
+            <li>App usage data and session logs</li>
+            <li>Location data (when permission is granted)</li>
+        </ul>
+    </div>
+
+    <div class="info-card">
+        <h3>2. How We Use Your Information</h3>
+        <ul>
+            <li><strong>Account Management</strong> — To create, verify, and manage your account.</li>
+            <li><strong>Order Processing</strong> — To facilitate purchases, deliveries, and returns.</li>
+            <li><strong>Communication</strong> — To send order confirmations, updates, and support responses.</li>
+            <li><strong>Platform Improvement</strong> — To analyze usage patterns and enhance user experience.</li>
+            <li><strong>Security &amp; Fraud Prevention</strong> — To detect and prevent unauthorized access or fraudulent activity.</li>
+            <li><strong>Marketing &amp; Notifications</strong> — To send relevant promotions and platform updates (you may opt out at any time).</li>
+            <li><strong>Legal Compliance</strong> — To comply with applicable laws and regulations.</li>
+        </ul>
+    </div>
+
+    <div class="info-card">
+        <h3>3. Data Protection &amp; Security</h3>
+        <p>Grande takes the protection of your personal data seriously. We implement the following security measures:</p>
+        <ul>
+            <li>All passwords are encrypted using industry-standard hashing algorithms.</li>
+            <li>Sensitive data is transmitted over HTTPS/SSL encrypted connections.</li>
+            <li>Access to user data is restricted to authorized personnel only.</li>
+            <li>Regular security audits and vulnerability assessments are conducted.</li>
+            <li>Payment information is handled through verified and PCI-compliant payment processors.</li>
+        </ul>
+        <p>While we take every reasonable precaution, no system is completely immune to security risks. We encourage users to use strong passwords and to report any suspicious activity immediately.</p>
+    </div>
+
+    <div class="info-card">
+        <h3>4. Sharing of Information</h3>
+        <p>Grande does not sell, rent, or trade your personal information to third parties for marketing purposes. We may share your information only in the following circumstances:</p>
+        <ul>
+            <li><strong>Delivery Partners</strong> — Sharing your name and address with riders or logistics providers to fulfill your orders.</li>
+            <li><strong>Payment Processors</strong> — Sharing transaction data with payment service providers to process payments securely.</li>
+            <li><strong>Legal Authorities</strong> — Disclosing information when required by law, court order, or government regulation.</li>
+            <li><strong>Platform Operations</strong> — Sharing with trusted service providers who assist in operating the platform, under strict confidentiality agreements.</li>
+        </ul>
+    </div>
+
+    <div class="info-card">
+        <h3>5. Cookies &amp; Tracking</h3>
+        <p>Grande uses cookies and similar tracking technologies to enhance your experience on our platform.</p>
+        <ul>
+            <li><strong>Essential Cookies</strong> — Required for the platform to function properly (e.g., session management, authentication).</li>
+            <li><strong>Analytical Cookies</strong> — Used to understand how users interact with the platform to improve performance.</li>
+            <li><strong>Preference Cookies</strong> — Used to remember your settings and preferences.</li>
+        </ul>
+        <p>You may disable cookies through your browser or device settings; however, doing so may affect the functionality of certain features.</p>
+    </div>
+
+    <div class="info-card">
+        <h3>6. Your Rights</h3>
+        <ul>
+            <li><strong>Right to Access</strong> — You may request a copy of the personal data we hold about you.</li>
+            <li><strong>Right to Correction</strong> — You may update or correct inaccurate information through your account settings.</li>
+            <li><strong>Right to Deletion</strong> — You may request the deletion of your account and associated data, subject to legal and operational requirements.</li>
+            <li><strong>Right to Withdraw Consent</strong> — You may opt out of marketing communications at any time.</li>
+            <li><strong>Right to Data Portability</strong> — You may request your data in a structured, machine-readable format.</li>
+        </ul>
+        <p>To exercise any of these rights, please contact our support team at <a href="mailto:support@grandemarket.com" style="color:#FF2BAC">support@grandemarket.com</a>.</p>
+    </div>
+
+    <div class="info-card">
+        <h3>7. Data Retention</h3>
+        <p>Grande retains your personal data for as long as your account is active or as necessary to provide services, comply with legal obligations, resolve disputes, and enforce agreements.</p>
+        <p>Upon account deletion, your personal data will be removed from our active systems within 30 days, except where retention is required by law.</p>
+    </div>
+
+    <div class="info-card">
+        <h3>8. Policy Updates</h3>
+        <p>Grande may update this Privacy Policy from time to time to reflect changes in our practices or applicable laws. Users will be notified of material changes through the platform or via email.</p>
+        <p><em>Last Updated: 2025</em></p>
+    </div>
+
+    <div class="text-center py-4" style="font-size:13px;color:#718096">
+        © 2025 Grande Marketplace. All rights reserved. &nbsp;·&nbsp;
+        <a href="/about" style="color:#FF2BAC">About</a> &nbsp;·&nbsp;
+        <a href="/terms" style="color:#FF2BAC">Terms &amp; Conditions</a>
+    </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+</body>
+</html>

@@ -151,21 +151,41 @@
                         <label class="form-label-custom">Label</label>
                         <input type="text" id="editAddrLabel" class="form-control-custom" placeholder="Home">
                     </div>
+                    <div class="col-md-6">
+                        <label class="addr-label">Region</label>
+                        <div class="select-wrapper">
+                            <select id="editRegion" class="addr-select" disabled>
+                                <option value="">Loading regions...</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <label class="addr-label">Province</label>
+                        <div class="select-wrapper">
+                            <select id="editProvince" class="addr-select" disabled>
+                                <option value="">Select Province</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <label class="addr-label">City / Municipality</label>
+                        <div class="select-wrapper">
+                            <select id="editCity" class="addr-select" disabled>
+                                <option value="">Select City/Municipality</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <label class="addr-label">Barangay</label>
+                        <div class="select-wrapper">
+                            <select id="editBarangay" class="addr-select" disabled>
+                                <option value="">Select Barangay</option>
+                            </select>
+                        </div>
+                    </div>
                     <div class="col-12">
                         <label class="form-label-custom">Street / House No.</label>
                         <input type="text" id="editAddrStreet" class="form-control-custom">
-                    </div>
-                    <div class="col-md-6">
-                        <label class="form-label-custom">Barangay</label>
-                        <input type="text" id="editAddrBarangay" class="form-control-custom">
-                    </div>
-                    <div class="col-md-6">
-                        <label class="form-label-custom">City / Municipality</label>
-                        <input type="text" id="editAddrCity" class="form-control-custom">
-                    </div>
-                    <div class="col-md-6">
-                        <label class="form-label-custom">Region</label>
-                        <input type="text" id="editAddrRegion" class="form-control-custom">
                     </div>
                     <div class="col-md-6">
                         <label class="form-label-custom">ZIP Code</label>
@@ -296,28 +316,75 @@ async function saveAddress(e) {
     }
 }
 
-function openEditModal(id, label, street, barangay, city, region, zip) {
-    document.getElementById('editAddrId').value      = id;
-    document.getElementById('editAddrLabel').value   = label;
-    document.getElementById('editAddrStreet').value  = street;
-    document.getElementById('editAddrBarangay').value= barangay;
-    document.getElementById('editAddrCity').value    = city;
-    document.getElementById('editAddrRegion').value  = region;
-    document.getElementById('editAddrZip').value     = zip;
-    new bootstrap.Modal(document.getElementById('editAddressModal')).show();
+let editPsgcInited = false;
+const editModal = document.getElementById('editAddressModal');
+
+editModal.addEventListener('hidden.bs.modal', () => {
+    editPsgcInited = false;
+});
+
+async function openEditModal(id, label, street, barangay, city, region, zip) {
+    document.getElementById('editAddrId').value     = id;
+    document.getElementById('editAddrLabel').value  = label;
+    document.getElementById('editAddrStreet').value = street;
+    document.getElementById('editAddrZip').value    = zip;
+    new bootstrap.Modal(editModal).show();
+
+    // Init PSGC dropdowns and pre-select saved values
+    if (!editPsgcInited) {
+        editPsgcInited = true;
+        const editIds = {
+            region: 'editRegion', province: 'editProvince',
+            city: 'editCity', barangay: 'editBarangay',
+        };
+        await loadRegions(editIds);
+        setupCascade(editIds);
+        // Pre-select region by name
+        if (region) {
+            const regionEl = document.getElementById('editRegion');
+            const regionCode = matchOption(regionEl, region);
+            if (regionCode) {
+                regionEl.value = regionCode;
+                const provinces = await loadProvinces(regionCode, editIds);
+                if (provinces.length && zip) {
+                    // try to match province from city name fallback
+                }
+                // Pre-select city
+                if (city) {
+                    await new Promise(r => setTimeout(r, 300));
+                    const cityEl = document.getElementById('editCity');
+                    const cityCode = matchOption(cityEl, city);
+                    if (cityCode) {
+                        cityEl.value = cityCode;
+                        await loadBarangays(cityCode, editIds);
+                        if (barangay) {
+                            const brgyEl = document.getElementById('editBarangay');
+                            const brgyCode = matchOption(brgyEl, barangay);
+                            if (brgyCode) brgyEl.value = brgyCode;
+                        }
+                    }
+                }
+            }
+        }
+    }
 }
 
 async function submitEditAddress() {
     const id = document.getElementById('editAddrId').value;
+    const getText = (elId) => { const el = document.getElementById(elId); return el?.value ? (el.options[el.selectedIndex]?.text || '') : ''; };
     const payload = {
         label:    document.getElementById('editAddrLabel').value.trim(),
         street:   document.getElementById('editAddrStreet').value.trim(),
-        barangay: document.getElementById('editAddrBarangay').value.trim(),
-        city:     document.getElementById('editAddrCity').value.trim(),
-        region:   document.getElementById('editAddrRegion').value.trim(),
+        region:   getText('editRegion'),
+        province: getText('editProvince'),
+        city:     getText('editCity'),
+        barangay: getText('editBarangay'),
         zip_code: document.getElementById('editAddrZip').value.trim(),
     };
-    if (!payload.label) { showToast('Label is required.', true); return; }
+    if (!payload.label)    { showToast('Label is required.', true); return; }
+    if (!payload.region)   { showToast('Please select a region.', true); return; }
+    if (!payload.city)     { showToast('Please select a city/municipality.', true); return; }
+    if (!payload.barangay) { showToast('Please select a barangay.', true); return; }
     const res = await fetch(`/buyer/api/addresses/${id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': CSRF() },

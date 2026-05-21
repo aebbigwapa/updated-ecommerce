@@ -688,17 +688,27 @@ function renderProduct(p) {
 
     // Add to cart
     document.getElementById('pdAddCartBtn').onclick = () => {
+        if (currentStock <= 0) return;
+        if (pdQty < 1 || pdQty > currentStock) {
+            showToast('Please select a valid quantity (1–' + currentStock + ').', true);
+            return;
+        }
         const variantId = document.getElementById('selectedVariant')?.value || null;
         if (document.querySelector('[data-user-id]') === null) {
             window.location.href = '/login?return_to=' + encodeURIComponent(window.location.pathname + window.location.search);
             return;
         }
-        addToCart({ id: p.id, name: p.name }, pdQty, variantId);
+        // Pass stock so shop.js frontend guard can run
+        addToCart({ id: p.id, name: p.name, total_stock: currentStock }, pdQty, variantId);
     };
 
     // Buy Now — check if logged in, if not store intent and redirect to login
     document.getElementById('pdCheckoutBtn').onclick = async () => {
         if (currentStock <= 0) return;
+        if (pdQty < 1 || pdQty > currentStock) {
+            showToast('Please select a valid quantity (1–' + currentStock + ').', true);
+            return;
+        }
         const variantId = document.getElementById('selectedVariant')?.value || null;
         
         // Check if user is logged in (check for session or token)

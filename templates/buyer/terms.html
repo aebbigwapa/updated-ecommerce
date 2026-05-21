@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Grande — Terms &amp; Conditions</title>
+    <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;600;700&family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/shop.css') }}">
+    <style>
+        .info-hero { background: linear-gradient(135deg, #FF2BAC, #FF9ED6); border-radius: 16px; padding: 36px 32px; color: #fff; margin-bottom: 28px; }
+        .info-hero h1 { font-family: 'Playfair Display', serif; font-size: 32px; font-weight: 700; }
+        .info-hero p { font-size: 14px; opacity: .9; margin: 0; }
+        .info-card { background: #fff; border-radius: 12px; padding: 28px; box-shadow: 0 2px 8px rgba(0,0,0,.06); margin-bottom: 16px; }
+        .info-card h3 { font-family: 'Playfair Display', serif; font-size: 17px; font-weight: 600; color: #FF2BAC; border-bottom: 1px solid #f0f0f0; padding-bottom: 10px; margin-bottom: 14px; }
+        .info-card p, .info-card li { font-size: 14px; color: #4a5568; line-height: 1.8; }
+        .info-card ul { padding-left: 20px; }
+    </style>
+</head>
+<body>
+{% from 'buyer/_navbar.html' import grande_navbar %}
+{{ grande_navbar(user=session.get('user'), active='') }}
+
+<div class="container py-4" style="max-width:800px">
+
+    <div class="info-hero">
+        <h1>Terms &amp; Conditions</h1>
+        <p>Effective Date: January 1, 2025 &nbsp;·&nbsp; Please read these terms carefully before using Grande.</p>
+    </div>
+
+    <div class="info-card">
+        <h3>1. Acceptance of Terms</h3>
+        <p>By accessing or using the Grande Marketplace platform — whether through our website or mobile application — you agree to be bound by these Terms and Conditions. If you do not agree to any part of these terms, you must discontinue use of the platform immediately.</p>
+        <p>Grande reserves the right to update or modify these Terms at any time. Continued use of the platform after any changes constitutes your acceptance of the revised Terms.</p>
+    </div>
+
+    <div class="info-card">
+        <h3>2. Use of the Platform</h3>
+        <p><strong>Acceptable Use:</strong></p>
+        <ul>
+            <li>You may use Grande solely for lawful purposes related to buying, selling, or delivering goods.</li>
+            <li>You agree to provide accurate, complete, and current information during registration and transactions.</li>
+            <li>You are responsible for maintaining the confidentiality of your account credentials.</li>
+        </ul>
+        <p class="mt-2"><strong>Prohibited Use:</strong></p>
+        <ul>
+            <li>Listing counterfeit, illegal, or prohibited goods.</li>
+            <li>Engaging in fraudulent transactions or misrepresenting products.</li>
+            <li>Harassing, threatening, or abusing other users.</li>
+            <li>Attempting to gain unauthorized access to any part of the platform.</li>
+            <li>Using automated tools, bots, or scrapers without prior written consent from Grande.</li>
+        </ul>
+    </div>
+
+    <div class="info-card">
+        <h3>3. User Accounts</h3>
+        <p>You must be at least 18 years of age to create an account on Grande. By registering, you represent that all information provided is accurate and truthful.</p>
+        <p>You are solely responsible for all activities that occur under your account. Grande will not be liable for any loss or damage arising from unauthorized use of your account. You must notify Grande immediately if you suspect any unauthorized access or security breach.</p>
+        <p>Grande reserves the right to suspend or terminate accounts that violate these Terms or engage in suspicious activity.</p>
+    </div>
+
+    <div class="info-card">
+        <h3>4. Product Listings &amp; Information</h3>
+        <p>Sellers are solely responsible for the accuracy, completeness, and legality of their product listings, including descriptions, images, pricing, and availability.</p>
+        <p>Grande does not warrant the accuracy of any product information provided by sellers. Buyers are encouraged to review product details carefully before placing an order. Grande reserves the right to remove any listing that violates platform policies or applicable laws without prior notice.</p>
+    </div>
+
+    <div class="info-card">
+        <h3>5. Orders, Cancellations &amp; Refunds</h3>
+        <p><strong>Orders:</strong> Once an order is placed and confirmed, it is considered a binding agreement between the buyer and seller. Buyers are expected to complete payment within the specified timeframe.</p>
+        <p><strong>Cancellations:</strong> Cancellations may be requested before the order is processed or shipped. Once an order has been dispatched, cancellations may no longer be accepted. Sellers reserve the right to cancel orders due to stock unavailability or other valid reasons.</p>
+        <p><strong>Refunds:</strong> Refund eligibility is subject to the seller's stated return and refund policy. Grande may facilitate dispute resolution between buyers and sellers but does not guarantee refunds in all cases. Refunds, where applicable, will be processed within 7–14 business days.</p>
+    </div>
+
+    <div class="info-card">
+        <h3>6. Payment Terms &amp; Security</h3>
+        <p>Grande supports secure payment methods as made available on the platform. All payment transactions are processed through verified and encrypted channels.</p>
+        <p>Buyers agree to pay the full amount indicated at checkout, including applicable shipping fees. Grande is not responsible for payment failures caused by third-party payment processors, bank issues, or insufficient funds.</p>
+        <p>Sellers acknowledge that payouts are subject to Grande's disbursement schedule and verification processes.</p>
+    </div>
+
+    <div class="info-card">
+        <h3>7. Account Suspension &amp; Termination</h3>
+        <p>Grande reserves the right to suspend or permanently terminate any account, at its sole discretion, for reasons including but not limited to:</p>
+        <ul>
+            <li>Violation of these Terms and Conditions.</li>
+            <li>Fraudulent, deceptive, or illegal activity.</li>
+            <li>Repeated negative feedback or unresolved disputes.</li>
+            <li>Inactivity for an extended period.</li>
+        </ul>
+        <p>Upon termination, your access to the platform will be revoked. Any pending transactions will be handled in accordance with Grande's policies at the time of termination.</p>
+    </div>
+
+    <div class="info-card">
+        <h3>8. Limitation of Liability</h3>
+        <p>Grande provides the platform on an "as is" and "as available" basis. To the fullest extent permitted by law, Grande shall not be liable for:</p>
+        <ul>
+            <li>Any indirect, incidental, or consequential damages arising from your use of the platform.</li>
+            <li>Loss of data, revenue, or profits.</li>
+            <li>Damages resulting from unauthorized access to your account.</li>
+            <li>Issues arising from third-party services, including payment processors and delivery partners.</li>
+        </ul>
+        <p>Grande's total liability, in any case, shall not exceed the amount paid by the user for the specific transaction giving rise to the claim.</p>
+    </div>
+
+    <div class="info-card">
+        <h3>9. Changes to These Terms</h3>
+        <p>Grande may revise these Terms and Conditions at any time. Users will be notified of significant changes through the platform or via email. It is your responsibility to review these Terms periodically. Your continued use of Grande following any updates constitutes your acceptance of the revised Terms.</p>
+        <p><em>Last Updated: 2025</em></p>
+    </div>
+
+    <div class="text-center py-4" style="font-size:13px;color:#718096">
+        © 2025 Grande Marketplace. All rights reserved. &nbsp;·&nbsp;
+        <a href="/about" style="color:#FF2BAC">About</a> &nbsp;·&nbsp;
+        <a href="/privacy" style="color:#FF2BAC">Privacy Policy</a>
+    </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+</body>
+</html>

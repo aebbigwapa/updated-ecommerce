@@ -1460,22 +1460,42 @@ class _RegisterScreenState extends State<RegisterScreen> {
   }
 
   Widget _buildLoginLink() {
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.center,
+    return Column(
       children: [
-        const Text(
-          "Already have an account? ",
-          style: TextStyle(color: AppTheme.textLight),
-        ),
-        TextButton(
-          onPressed: () => Navigator.pushReplacementNamed(context, '/login'),
-          child: const Text(
-            'Login',
-            style: TextStyle(
-              color: AppTheme.primaryLight,
-              fontWeight: FontWeight.w600,
+        Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            const Text(
+              "Already have an account? ",
+              style: TextStyle(color: AppTheme.textLight),
             ),
-          ),
+            TextButton(
+              onPressed: () => Navigator.pushReplacementNamed(context, '/login'),
+              child: const Text(
+                'Login',
+                style: TextStyle(
+                  color: AppTheme.primaryLight,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ),
+          ],
+        ),
+        Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            TextButton(
+              onPressed: () => Navigator.pushNamed(context, '/terms'),
+              child: const Text('Terms & Conditions',
+                  style: TextStyle(fontSize: 11, color: AppTheme.textLight)),
+            ),
+            const Text('·', style: TextStyle(color: AppTheme.textLight)),
+            TextButton(
+              onPressed: () => Navigator.pushNamed(context, '/privacy'),
+              child: const Text('Privacy Policy',
+                  style: TextStyle(fontSize: 11, color: AppTheme.textLight)),
+            ),
+          ],
         ),
       ],
     );

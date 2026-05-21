@@ -140,6 +140,17 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
 
   Future<void> _addToCart() async {
     if (_product == null) return;
+    final stock = _currentStock();
+    if (stock <= 0) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+        content: Text('This item is out of stock.'), backgroundColor: Colors.red));
+      return;
+    }
+    if (_selectedQuantity < 1 || _selectedQuantity > stock) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text('Please select a valid quantity (1–$stock).'), backgroundColor: Colors.red));
+      return;
+    }
 
     final token = await ApiService.getAuthToken();
     if (token == null) {
@@ -214,13 +225,20 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
 
   Future<void> _buyNow() async {
     if (_product == null) return;
+    final stock = _currentStock();
     if (_product!.variants.isNotEmpty && _selectedVariantId == null) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-          content: Text('Please select a product variant first.'),
-          backgroundColor: Colors.orange,
-        ));
-      }
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+        content: Text('Please select a product variant first.'), backgroundColor: Colors.orange));
+      return;
+    }
+    if (stock <= 0) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+        content: Text('This item is out of stock.'), backgroundColor: Colors.red));
+      return;
+    }
+    if (_selectedQuantity < 1 || _selectedQuantity > stock) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text('Please select a valid quantity (1–$stock).'), backgroundColor: Colors.red));
       return;
     }
 
@@ -246,39 +264,48 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
       return;
     }
 
-    final stock = _currentStock();
-    if (stock <= 0) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-          content: Text('This item is out of stock.'), backgroundColor: Colors.red,
-        ));
-      }
-      return;
-    }
-
     setState(() => _isAddingToCart = true);
     try {
-      final buyNowItem = {
-        'id': 'buynow',
-        'product_name': _product!.name,
-        'image': _product!.imageUrl ?? '',
-        'variant': _selectedVariantId != null
-            ? (_product!.variants.firstWhere((v) => v.id == _selectedVariantId).value ?? '')
-            : 'Standard',
-        'price': _currentPrice(),
-        'quantity': _selectedQuantity,
-        'subtotal': _currentPrice() * _selectedQuantity,
-      };
-      if (!mounted) return;
-      Navigator.push(
-        context,
-        MaterialPageRoute(
-          builder: (_) => CheckoutScreen(
-            cartItems: [buyNowItem],
-            totalAmount: _currentPrice() * _selectedQuantity,
-          ),
-        ),
+      // Call backend — server re-validates stock before storing buy-now session
+      final res = await ApiService.postJson(
+        '/api/buy-now',
+        {
+          'product_id': _product!.id,
+          'variant_id': _selectedVariantId,
+          'quantity': _selectedQuantity,
+        },
+        token: token,
       );
+      if (!mounted) return;
+      if (res['success'] == true || res['data'] != null) {
+        final buyNowItem = {
+          'id': 'buynow',
+          'product_name': _product!.name,
+          'image': _product!.imageUrl ?? '',
+          'variant': _selectedVariantId != null
+              ? (_product!.variants.firstWhere((v) => v.id == _selectedVariantId).value ?? '')
+              : 'Standard',
+          'price': _currentPrice(),
+          'quantity': _selectedQuantity,
+          'subtotal': _currentPrice() * _selectedQuantity,
+        };
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (_) => CheckoutScreen(
+              cartItems: [buyNowItem],
+              totalAmount: _currentPrice() * _selectedQuantity,
+            ),
+          ),
+        );
+      } else {
+        final msg = res['error']?.toString() ?? res['message']?.toString() ?? 'Failed to proceed to checkout.';
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text(msg), backgroundColor: Colors.red));
+      }
+    } catch (_) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+        content: Text('Network error. Please try again.'), backgroundColor: Colors.red));
     } finally {
       if (mounted) setState(() => _isAddingToCart = false);
     }

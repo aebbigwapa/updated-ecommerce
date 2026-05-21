@@ -115,6 +115,23 @@ def create_app():
         products = product_model.get_all_active()
         return __import__('flask').render_template('buyer/index.html', products=products)
 
+    # Public info pages (no login required)
+    @app.route('/about')
+    def about():
+        return __import__('flask').render_template('buyer/about.html')
+
+    @app.route('/terms')
+    def terms():
+        return __import__('flask').render_template('buyer/terms.html')
+
+    @app.route('/privacy')
+    def privacy():
+        return __import__('flask').render_template('buyer/privacy.html')
+
+    @app.route('/help')
+    def help_support():
+        return __import__('flask').render_template('buyer/help.html')
+
     # Note: /login and /logout are handled by auth_bp blueprint
     # No need to duplicate them here
     

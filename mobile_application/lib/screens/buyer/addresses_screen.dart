@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import '../../theme/app_theme.dart';
 import '../../services/api_service.dart';
+import '../../services/psgc_service.dart';
 
 class AddressesScreen extends StatefulWidget {
   const AddressesScreen({super.key});
@@ -211,46 +212,166 @@ class _AddressForm extends StatefulWidget {
 }
 
 class _AddressFormState extends State<_AddressForm> {
-  final _label    = TextEditingController();
-  final _region   = TextEditingController();
-  final _city     = TextEditingController();
-  final _barangay = TextEditingController();
-  final _street   = TextEditingController();
-  final _zip      = TextEditingController();
+  final _label  = TextEditingController();
+  final _street = TextEditingController();
+  final _zip    = TextEditingController();
   bool _saving = false;
+
+  // PSGC state
+  List<Map<String, String>> _regions    = [];
+  List<Map<String, String>> _provinces  = [];
+  List<Map<String, String>> _cities     = [];
+  List<Map<String, String>> _barangays  = [];
+
+  String? _regionCode,    _regionName;
+  String? _provinceCode,  _provinceName;
+  String? _cityCode,      _cityName;
+  String? _barangayCode,  _barangayName;
+
+  bool _loadingRegions   = true;
+  bool _loadingProvinces = false;
+  bool _loadingCities    = false;
+  bool _loadingBarangays = false;
+  bool _noProvince       = false; // NCR-style regions
 
   @override
   void initState() {
     super.initState();
     final e = widget.existing;
     if (e != null) {
-      _label.text    = e['label']?.toString()    ?? '';
-      _region.text   = e['region']?.toString()   ?? '';
-      _city.text     = e['city']?.toString()     ?? '';
-      _barangay.text = e['barangay']?.toString() ?? '';
-      _street.text   = e['street']?.toString()   ?? '';
-      _zip.text      = e['zip_code']?.toString() ?? '';
+      _label.text  = e['label']?.toString()    ?? '';
+      _street.text = e['street']?.toString()   ?? '';
+      _zip.text    = e['zip_code']?.toString() ?? '';
     }
+    _loadRegions();
   }
 
   @override
   void dispose() {
-    _label.dispose(); _region.dispose(); _city.dispose();
-    _barangay.dispose(); _street.dispose(); _zip.dispose();
+    _label.dispose(); _street.dispose(); _zip.dispose();
     super.dispose();
   }
 
-  Future<void> _save() async {
-    final fields = {
-      'label': _label.text.trim(), 'region': _region.text.trim(),
-      'city': _city.text.trim(), 'barangay': _barangay.text.trim(),
-      'street': _street.text.trim(), 'zip_code': _zip.text.trim(),
-    };
-    if (fields.values.any((v) => v.isEmpty)) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-        content: Text('Please fill in all fields.'), backgroundColor: Colors.red));
-      return;
+  Future<void> _loadRegions() async {
+    final data = await PSGService.getRegions();
+    if (!mounted) return;
+    setState(() { _regions = data; _loadingRegions = false; });
+    // Pre-select if editing
+    final e = widget.existing;
+    if (e != null && e['region'] != null) {
+      final saved = e['region'].toString();
+      final match = data.firstWhere(
+        (r) => r['name']!.toLowerCase() == saved.toLowerCase(),
+        orElse: () => {},
+      );
+      if (match.isNotEmpty) await _onRegionChanged(match['code']!, match['name']!);
     }
+  }
+
+  Future<void> _onRegionChanged(String code, String name) async {
+    setState(() {
+      _regionCode = code; _regionName = name;
+      _provinceCode = null; _provinceName = null;
+      _cityCode = null; _cityName = null;
+      _barangayCode = null; _barangayName = null;
+      _provinces = []; _cities = []; _barangays = [];
+      _loadingProvinces = true; _noProvince = false;
+    });
+    final data = await PSGService.getProvinces(code);
+    if (!mounted) return;
+    if (data.isEmpty) {
+      // NCR-style: load cities directly
+      setState(() { _noProvince = true; _loadingProvinces = false; _loadingCities = true; });
+      final cities = await PSGService.getCitiesByRegion(code);
+      if (!mounted) return;
+      setState(() { _cities = cities; _loadingCities = false; });
+      _tryPreSelectCity();
+    } else {
+      setState(() { _provinces = data; _loadingProvinces = false; });
+      _tryPreSelectProvince();
+    }
+  }
+
+  void _tryPreSelectProvince() {
+    final e = widget.existing;
+    if (e == null) return;
+    final saved = (e['province'] ?? '').toString();
+    if (saved.isEmpty) return;
+    final match = _provinces.firstWhere(
+      (p) => p['name']!.toLowerCase() == saved.toLowerCase(),
+      orElse: () => {},
+    );
+    if (match.isNotEmpty) _onProvinceChanged(match['code']!, match['name']!);
+  }
+
+  Future<void> _onProvinceChanged(String code, String name) async {
+    setState(() {
+      _provinceCode = code; _provinceName = name;
+      _cityCode = null; _cityName = null;
+      _barangayCode = null; _barangayName = null;
+      _cities = []; _barangays = [];
+      _loadingCities = true;
+    });
+    final data = await PSGService.getCities(code);
+    if (!mounted) return;
+    setState(() { _cities = data; _loadingCities = false; });
+    _tryPreSelectCity();
+  }
+
+  void _tryPreSelectCity() {
+    final e = widget.existing;
+    if (e == null) return;
+    final saved = (e['city'] ?? '').toString();
+    if (saved.isEmpty) return;
+    final match = _cities.firstWhere(
+      (c) => c['name']!.toLowerCase() == saved.toLowerCase(),
+      orElse: () => {},
+    );
+    if (match.isNotEmpty) _onCityChanged(match['code']!, match['name']!);
+  }
+
+  Future<void> _onCityChanged(String code, String name) async {
+    setState(() {
+      _cityCode = code; _cityName = name;
+      _barangayCode = null; _barangayName = null;
+      _barangays = [];
+      _loadingBarangays = true;
+    });
+    final data = await PSGService.getBarangays(code);
+    if (!mounted) return;
+    setState(() { _barangays = data; _loadingBarangays = false; });
+    _tryPreSelectBarangay();
+  }
+
+  void _tryPreSelectBarangay() {
+    final e = widget.existing;
+    if (e == null) return;
+    final saved = (e['barangay'] ?? '').toString();
+    if (saved.isEmpty) return;
+    final match = _barangays.firstWhere(
+      (b) => b['name']!.toLowerCase() == saved.toLowerCase(),
+      orElse: () => {},
+    );
+    if (match.isNotEmpty) setState(() { _barangayCode = match['code']; _barangayName = match['name']; });
+  }
+
+  Future<void> _save() async {
+    if (_label.text.trim().isEmpty) { _err('Label is required.'); return; }
+    if (_regionName == null)   { _err('Please select a region.'); return; }
+    if (_cityName == null)     { _err('Please select a city/municipality.'); return; }
+    if (_barangayName == null) { _err('Please select a barangay.'); return; }
+    if (_street.text.trim().isEmpty) { _err('Please enter a street/house no.'); return; }
+
+    final fields = {
+      'label':    _label.text.trim(),
+      'region':   _regionName!,
+      'province': _provinceName ?? '',
+      'city':     _cityName!,
+      'barangay': _barangayName!,
+      'street':   _street.text.trim(),
+      'zip_code': _zip.text.trim(),
+    };
+
     setState(() => _saving = true);
     final token = await ApiService.getAuthToken() ?? '';
     bool success = false;
@@ -276,14 +397,13 @@ class _AddressFormState extends State<_AddressForm> {
     }
     if (mounted) {
       setState(() => _saving = false);
-      if (success) {
-        widget.onSaved();
-      } else {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-          content: Text(error ?? 'Failed to save address.'), backgroundColor: Colors.red));
-      }
+      if (success) widget.onSaved();
+      else _err(error ?? 'Failed to save address.');
     }
   }
+
+  void _err(String msg) => ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(msg), backgroundColor: Colors.red));
 
   @override
   Widget build(BuildContext context) {
@@ -300,12 +420,59 @@ class _AddressFormState extends State<_AddressForm> {
           Text(widget.existing != null ? 'Edit Address' : 'Add New Address',
               style: const TextStyle(fontFamily: AppTheme.fontDisplay, fontSize: 18, fontWeight: FontWeight.w700)),
           const SizedBox(height: 16),
-          _f(_label,    'Label (e.g. Home, Office)'),
-          _f(_region,   'Region'),
-          _f(_city,     'City / Municipality'),
-          _f(_barangay, 'Barangay'),
-          _f(_street,   'Street / House No.'),
-          _f(_zip,      'ZIP Code', type: TextInputType.number),
+          _textField(_label, 'Label (e.g. Home, Office)'),
+          // Region
+          _dropdownField<Map<String, String>>(
+            label: 'Region',
+            loading: _loadingRegions,
+            value: _regionCode != null
+                ? _regions.firstWhere((r) => r['code'] == _regionCode, orElse: () => {})
+                : null,
+            items: _regions,
+            itemLabel: (r) => r['name']!,
+            onChanged: (r) => _onRegionChanged(r!['code']!, r['name']!),
+            enabled: !_loadingRegions,
+          ),
+          // Province (hidden for NCR-style regions)
+          if (!_noProvince)
+            _dropdownField<Map<String, String>>(
+              label: 'Province',
+              loading: _loadingProvinces,
+              value: _provinceCode != null
+                  ? _provinces.firstWhere((p) => p['code'] == _provinceCode, orElse: () => {})
+                  : null,
+              items: _provinces,
+              itemLabel: (p) => p['name']!,
+              onChanged: (p) => _onProvinceChanged(p!['code']!, p['name']!),
+              enabled: _regionCode != null && !_loadingProvinces && _provinces.isNotEmpty,
+            ),
+          // City / Municipality
+          _dropdownField<Map<String, String>>(
+            label: 'City / Municipality',
+            loading: _loadingCities,
+            value: _cityCode != null
+                ? _cities.firstWhere((c) => c['code'] == _cityCode, orElse: () => {})
+                : null,
+            items: _cities,
+            itemLabel: (c) => c['name']!,
+            onChanged: (c) => _onCityChanged(c!['code']!, c['name']!),
+            enabled: (_noProvince ? _regionCode != null : _provinceCode != null)
+                && !_loadingCities && _cities.isNotEmpty,
+          ),
+          // Barangay
+          _dropdownField<Map<String, String>>(
+            label: 'Barangay',
+            loading: _loadingBarangays,
+            value: _barangayCode != null
+                ? _barangays.firstWhere((b) => b['code'] == _barangayCode, orElse: () => {})
+                : null,
+            items: _barangays,
+            itemLabel: (b) => b['name']!,
+            onChanged: (b) => setState(() { _barangayCode = b!['code']; _barangayName = b['name']; }),
+            enabled: _cityCode != null && !_loadingBarangays && _barangays.isNotEmpty,
+          ),
+          _textField(_street, 'Street / House No.'),
+          _textField(_zip, 'ZIP Code', type: TextInputType.number),
           const SizedBox(height: 16),
           SizedBox(
             width: double.infinity,
@@ -328,7 +495,7 @@ class _AddressFormState extends State<_AddressForm> {
     );
   }
 
-  Widget _f(TextEditingController ctrl, String label, {TextInputType? type}) =>
+  Widget _textField(TextEditingController ctrl, String label, {TextInputType? type}) =>
       Padding(
         padding: const EdgeInsets.only(bottom: 12),
         child: TextField(
@@ -341,4 +508,46 @@ class _AddressFormState extends State<_AddressForm> {
           ),
         ),
       );
+
+  Widget _dropdownField<T>({
+    required String label,
+    required bool loading,
+    required T? value,
+    required List<T> items,
+    required String Function(T) itemLabel,
+    required ValueChanged<T?> onChanged,
+    required bool enabled,
+  }) {
+    // Ensure value is actually in items list (avoid assertion error)
+    final safeValue = (value != null && items.contains(value)) ? value : null;
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: InputDecorator(
+        decoration: InputDecoration(
+          labelText: label,
+          border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+          contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+          suffixIcon: loading
+              ? const Padding(
+                  padding: EdgeInsets.all(12),
+                  child: SizedBox(width: 16, height: 16,
+                      child: CircularProgressIndicator(strokeWidth: 2, color: AppTheme.primaryLight)))
+              : null,
+        ),
+        child: DropdownButtonHideUnderline(
+          child: DropdownButton<T>(
+            value: safeValue,
+            isExpanded: true,
+            hint: Text(loading ? 'Loading...' : 'Select $label',
+                style: const TextStyle(fontSize: 14, color: Colors.grey)),
+            onChanged: enabled ? onChanged : null,
+            items: items.map((item) => DropdownMenuItem<T>(
+              value: item,
+              child: Text(itemLabel(item), style: const TextStyle(fontSize: 14)),
+            )).toList(),
+          ),
+        ),
+      ),
+    );
+  }
 }

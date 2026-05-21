@@ -92,6 +92,15 @@ def api_start_conversation():
     conv = msg_model.get_or_create_conversation(user['id'], other_id, order_id)
     if not conv:
         return jsonify({'error': 'Failed to create conversation'}), 500
+    # Enrich with participant data for admin panel
+    if _is_admin():
+        all_ids = list({conv['participant_1'], conv['participant_2']})
+        users_res = msg_model.supabase.table('users').select(
+            'id, first_name, last_name, role, email, profile_picture'
+        ).in_('id', all_ids).execute()
+        users_map = {u['id']: u for u in (users_res.data or [])}
+        conv['participant_1_data'] = users_map.get(conv['participant_1'])
+        conv['participant_2_data'] = users_map.get(conv['participant_2'])
     return jsonify(conv)
 
 
@@ -372,6 +381,31 @@ def api_get_admin_user_id():
         if admin.data:
             return jsonify({'admin_id': admin.data[0]['id']})
         return jsonify({'error': 'No admin user found'}), 404
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@messages_bp.route('/api/users', methods=['GET'])
+@_login_required
+def api_list_users_for_admin():
+    """Session-based: admin only. List users for new conversation modal.
+    Optional ?role=buyer|seller|rider&search=name"""
+    if not _is_admin():
+        return jsonify({'error': 'Forbidden'}), 403
+    role_filter = request.args.get('role', '').strip()
+    search = request.args.get('search', '').strip().lower()
+    try:
+        query = msg_model.supabase.table('users').select(
+            'id, first_name, last_name, role, email, profile_picture'
+        ).neq('role', 'admin').order('first_name')
+        if role_filter in ('buyer', 'seller', 'rider'):
+            query = query.eq('role', role_filter)
+        result = query.limit(200).execute()
+        users = result.data or []
+        if search:
+            users = [u for u in users if search in
+                     f"{u.get('first_name','')} {u.get('last_name','')} {u.get('email','')}".lower()]
+        return jsonify(users)
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
