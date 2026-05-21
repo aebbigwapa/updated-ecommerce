@@ -1,4 +1,4 @@
-import 'dart:io';
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:image_picker/image_picker.dart';
@@ -16,23 +16,14 @@ class _RiderProfileScreenState extends State<RiderProfileScreen> {
   final _nameCtrl = TextEditingController();
   final _emailCtrl = TextEditingController();
   final _phoneCtrl = TextEditingController();
-  final _vehiclePlateCtrl = TextEditingController();
-  final _vehicleModelCtrl = TextEditingController();
-  final _vehicleColorCtrl = TextEditingController();
-  final _licenseNumCtrl = TextEditingController();
-  final _licenseExpiryCtrl = TextEditingController();
-  File? _licenseImage;
 
-  String _vehicleType = 'motorcycle';
   Map<String, dynamic> _perf = {};
-  Map<String, bool> _schedule = {
-    'Mon': true, 'Tue': true, 'Wed': true, 'Thu': true,
-    'Fri': true, 'Sat': true, 'Sun': true,
-  };
+  Map<String, dynamic> _earningsSummary = {};
   bool _loading = true;
   String _token = '';
   String? _profilePicture;
   bool _uploadingPic = false;
+  bool _isActive = true;
 
   @override
   void initState() {
@@ -45,11 +36,6 @@ class _RiderProfileScreenState extends State<RiderProfileScreen> {
     _nameCtrl.dispose();
     _emailCtrl.dispose();
     _phoneCtrl.dispose();
-    _vehiclePlateCtrl.dispose();
-    _vehicleModelCtrl.dispose();
-    _vehicleColorCtrl.dispose();
-    _licenseNumCtrl.dispose();
-    _licenseExpiryCtrl.dispose();
     super.dispose();
   }
 
@@ -58,41 +44,40 @@ class _RiderProfileScreenState extends State<RiderProfileScreen> {
     if (_token.isEmpty) { if (mounted) setState(() => _loading = false); return; }
     setState(() => _loading = true);
     try {
-      final profile = await ApiService.riderGetProfile(_token);
-      final perf = await ApiService.riderGetPerformance(_token);
+      final results = await Future.wait([
+        ApiService.riderGetProfile(_token),
+        ApiService.riderGetPerformance(_token),
+        _fetchEarningsSummary(),
+      ]);
       if (!mounted) return;
+      final profile = results[0] as Map<String, dynamic>;
+      final perf = results[1] as Map<String, dynamic>;
+      final earnings = results[2] as Map<String, dynamic>;
       setState(() {
         _perf = perf;
+        _earningsSummary = earnings;
         _nameCtrl.text = profile['name']?.toString() ?? '';
         _emailCtrl.text = profile['email']?.toString() ?? '';
         _phoneCtrl.text = profile['phone']?.toString() ?? '';
-        final v = profile['vehicle'] is Map
-            ? Map<String, dynamic>.from(profile['vehicle'] as Map)
-            : <String, dynamic>{};
-        _vehicleType = v['type']?.toString().isNotEmpty == true ? v['type'].toString() : 'motorcycle';
-        _vehiclePlateCtrl.text = v['plate']?.toString() ?? '';
-        _vehicleModelCtrl.text = v['model']?.toString() ?? '';
-        _vehicleColorCtrl.text = v['color']?.toString() ?? '';
-        final l = profile['license'] is Map
-            ? Map<String, dynamic>.from(profile['license'] as Map)
-            : <String, dynamic>{};
-        _licenseNumCtrl.text = l['number']?.toString() ?? '';
-        _licenseExpiryCtrl.text = l['expiry']?.toString() ?? '';
-        final s = profile['schedule'] is Map
-            ? Map<String, dynamic>.from(profile['schedule'] as Map)
-            : <String, dynamic>{};
-        _schedule = {
-          'Mon': s['Mon'] != false, 'Tue': s['Tue'] != false,
-          'Wed': s['Wed'] != false, 'Thu': s['Thu'] != false,
-          'Fri': s['Fri'] != false, 'Sat': s['Sat'] != false,
-          'Sun': s['Sun'] != false,
-        };
         _profilePicture = profile['profile_picture'] as String?;
+        _isActive = profile['is_available'] != false;
         _loading = false;
       });
     } catch (_) {
       if (mounted) setState(() => _loading = false);
     }
+  }
+
+  Future<Map<String, dynamic>> _fetchEarningsSummary() async {
+    try {
+      final res = await http.get(
+        Uri.parse('${ApiService.flaskBaseUrl}/api/rider/earnings'),
+        headers: {'Authorization': 'Bearer $_token'},
+      ).timeout(const Duration(seconds: 10));
+      final body = jsonDecode(res.body);
+      final data = body['data'];
+      return data is Map<String, dynamic> ? data : (data is Map ? Map<String, dynamic>.from(data) : {});
+    } catch (_) { return {}; }
   }
 
   Future<void> _pickAndUploadPicture() async {
@@ -136,6 +121,8 @@ class _RiderProfileScreenState extends State<RiderProfileScreen> {
       if (mounted) setState(() => _uploadingPic = false);
     }
   }
+
+  String _fmt(dynamic v) { try { return double.parse(v.toString()).toStringAsFixed(2); } catch (_) { return '0.00'; } }
 
   void _snack(Map<String, dynamic> res) {
     if (!mounted) return;
@@ -182,35 +169,6 @@ class _RiderProfileScreenState extends State<RiderProfileScreen> {
         'phone': _phoneCtrl.text.trim(),
       }));
 
-  Future<void> _saveVehicle() async =>
-      _snack(await ApiService.riderSaveProfile(_token, {
-        'vehicle': {
-          'type': _vehicleType,
-          'plate': _vehiclePlateCtrl.text.trim(),
-          'model': _vehicleModelCtrl.text.trim(),
-          'color': _vehicleColorCtrl.text.trim(),
-        },
-      }));
-
-  Future<void> _saveLicense() async =>
-      _snack(await ApiService.riderSaveProfile(_token, {
-        'license': {
-          'number': _licenseNumCtrl.text.trim(),
-          'expiry': _licenseExpiryCtrl.text,
-        },
-      }));
-
-  Future<void> _pickLicenseImage() async {
-    final picker = ImagePicker();
-    final picked = await picker.pickImage(source: ImageSource.gallery, imageQuality: 80);
-    if (picked != null && mounted) {
-      setState(() => _licenseImage = File(picked.path));
-    }
-  }
-
-  Future<void> _saveSchedule() async =>
-      _snack(await ApiService.riderSaveProfile(_token, {'schedule': _schedule}));
-
   @override
   Widget build(BuildContext context) {
     final body = _loading
@@ -220,160 +178,134 @@ class _RiderProfileScreenState extends State<RiderProfileScreen> {
             child: ListView(
               padding: const EdgeInsets.all(16),
               children: [
-                _section('👤 Personal Info', [
-                  // Avatar upload
-                  Center(
-                    child: GestureDetector(
-                      onTap: _pickAndUploadPicture,
-                      child: Stack(
-                        children: [
-                          CircleAvatar(
-                            radius: 44,
-                            backgroundColor: AppTheme.primaryLight.withValues(alpha: 0.15),
-                            backgroundImage: _profilePicture != null && _profilePicture!.isNotEmpty
-                                ? NetworkImage(_profilePicture!) as ImageProvider
-                                : null,
-                            child: _profilePicture == null || _profilePicture!.isEmpty
-                                ? Text(
-                                    _nameCtrl.text.isNotEmpty
-                                        ? _nameCtrl.text[0].toUpperCase()
-                                        : 'R',
-                                    style: const TextStyle(
-                                        fontSize: 32, fontWeight: FontWeight.w700,
-                                        color: AppTheme.primaryLight),
-                                  )
-                                : null,
-                          ),
-                          if (_uploadingPic)
-                            Positioned.fill(
-                              child: Container(
-                                decoration: BoxDecoration(
-                                  color: Colors.black.withValues(alpha: 0.4),
-                                  shape: BoxShape.circle,
-                                ),
-                                child: const Center(
-                                  child: CircularProgressIndicator(
-                                      color: Colors.white, strokeWidth: 2),
-                                ),
-                              ),
-                            ),
-                          Positioned(
-                            bottom: 0, right: 0,
-                            child: Container(
-                              width: 28, height: 28,
-                              decoration: BoxDecoration(
-                                color: AppTheme.primaryLight,
-                                shape: BoxShape.circle,
-                                border: Border.all(color: Colors.white, width: 2),
-                              ),
-                              child: const Icon(Icons.camera_alt,
-                                  size: 14, color: Colors.white),
-                            ),
-                          ),
-                        ],
-                      ),
+                // ── Profile Header ──────────────────────────────
+                Container(
+                  padding: const EdgeInsets.all(20),
+                  decoration: BoxDecoration(
+                    gradient: const LinearGradient(
+                      colors: [Color(0xFF1a1a3e), Color(0xFF2d2d6e)],
+                      begin: Alignment.topLeft, end: Alignment.bottomRight,
                     ),
+                    borderRadius: BorderRadius.circular(16),
                   ),
-                  const SizedBox(height: 16),
+                  child: Column(children: [
+                    GestureDetector(
+                      onTap: _pickAndUploadPicture,
+                      child: Stack(children: [
+                        CircleAvatar(
+                          radius: 44,
+                          backgroundColor: Colors.white.withValues(alpha: 0.2),
+                          backgroundImage: _profilePicture != null && _profilePicture!.isNotEmpty
+                              ? NetworkImage(_profilePicture!) as ImageProvider
+                              : null,
+                          child: _profilePicture == null || _profilePicture!.isEmpty
+                              ? Text(
+                                  _nameCtrl.text.isNotEmpty ? _nameCtrl.text[0].toUpperCase() : 'R',
+                                  style: const TextStyle(fontSize: 32, fontWeight: FontWeight.w700, color: Colors.white),
+                                )
+                              : null,
+                        ),
+                        if (_uploadingPic)
+                          Positioned.fill(child: Container(
+                            decoration: BoxDecoration(color: Colors.black.withValues(alpha: 0.4), shape: BoxShape.circle),
+                            child: const Center(child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2)),
+                          )),
+                        Positioned(
+                          bottom: 0, right: 0,
+                          child: Container(
+                            width: 28, height: 28,
+                            decoration: BoxDecoration(
+                              color: AppTheme.primaryLight, shape: BoxShape.circle,
+                              border: Border.all(color: Colors.white, width: 2),
+                            ),
+                            child: const Icon(Icons.camera_alt, size: 14, color: Colors.white),
+                          ),
+                        ),
+                      ]),
+                    ),
+                    const SizedBox(height: 12),
+                    Text(
+                      _nameCtrl.text.isNotEmpty ? _nameCtrl.text : 'Rider',
+                      style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w700, color: Colors.white),
+                    ),
+                    const SizedBox(height: 6),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                      decoration: BoxDecoration(
+                        color: _isActive ? Colors.green.withValues(alpha: 0.25) : Colors.grey.withValues(alpha: 0.25),
+                        borderRadius: BorderRadius.circular(20),
+                        border: Border.all(color: _isActive ? Colors.green : Colors.grey),
+                      ),
+                      child: Row(mainAxisSize: MainAxisSize.min, children: [
+                        Container(width: 7, height: 7,
+                            decoration: BoxDecoration(color: _isActive ? Colors.greenAccent : Colors.grey, shape: BoxShape.circle)),
+                        const SizedBox(width: 6),
+                        Text(_isActive ? 'Active' : 'Inactive',
+                            style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600,
+                                color: _isActive ? Colors.greenAccent : Colors.grey.shade300)),
+                      ]),
+                    ),
+                  ]),
+                ),
+                const SizedBox(height: 16),
+
+                // ── Basic Info ──────────────────────────────────
+                _section('👤 Basic Information', [
                   _field('Full Name', _nameCtrl),
                   _field('Email', _emailCtrl, type: TextInputType.emailAddress),
                   _field('Phone', _phoneCtrl, type: TextInputType.phone),
-                  _saveBtn('Save Personal Info', _savePersonal),
+                  _saveBtn('Save', _savePersonal),
                 ]),
                 const SizedBox(height: 16),
-                _section('⭐ Performance', [
+
+                // ── Performance Summary ─────────────────────────
+                _section('📊 Performance Summary', [
                   Row(children: [
                     _perfTile('${_perf['avg_rating'] ?? '—'}', 'Avg Rating'),
-                    _perfTile('${_perf['total_deliveries'] ?? 0}', 'Total Deliveries'),
-                    _perfTile(
-                      _perf['acceptance_rate'] != null ? '${_perf['acceptance_rate']}%' : '—%',
-                      'Accept Rate',
-                    ),
-                    _perfTile(
-                      _perf['late_percentage'] != null ? '${_perf['late_percentage']}%' : '—%',
-                      'Late %',
-                    ),
+                    _perfTile('${_perf['total_deliveries'] ?? 0}', 'Deliveries'),
+                    _perfTile(_perf['acceptance_rate'] != null ? '${_perf['acceptance_rate']}%' : '—%', 'Accept Rate'),
+                    _perfTile(_perf['late_percentage'] != null ? '${_perf['late_percentage']}%' : '—%', 'Late %'),
                   ]),
                 ]),
                 const SizedBox(height: 16),
-                _section('🏍️ Vehicle Details', [
-                  Padding(
-                    padding: const EdgeInsets.only(bottom: 12),
-                    child: DropdownButtonFormField<String>(
-                      value: _vehicleType,
-                      decoration: const InputDecoration(labelText: 'Vehicle Type', border: OutlineInputBorder()),
-                      items: ['motorcycle', 'bicycle', 'scooter', 'car']
-                          .map((e) => DropdownMenuItem(value: e, child: Text(e)))
-                          .toList(),
-                      onChanged: (v) => setState(() => _vehicleType = v ?? 'motorcycle'),
+
+                // ── Earnings Overview ───────────────────────────
+                _section('💰 Earnings Overview', [
+                  Row(children: [
+                    _earningTile('Today', '₱${_fmt(_earningsSummary['today'])}', Colors.indigo),
+                    const SizedBox(width: 8),
+                    _earningTile('This Week', '₱${_fmt(_earningsSummary['week'])}', Colors.teal),
+                    const SizedBox(width: 8),
+                    _earningTile('This Month', '₱${_fmt(_earningsSummary['month'])}', Colors.orange),
+                  ]),
+                  const SizedBox(height: 10),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                    decoration: BoxDecoration(
+                      color: AppTheme.primaryLight.withValues(alpha: 0.08),
+                      borderRadius: BorderRadius.circular(10),
                     ),
+                    child: Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
+                      const Text('Total Earnings', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: AppTheme.textDark)),
+                      Text('₱${_fmt(_earningsSummary['total'])}',
+                          style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700, color: AppTheme.primaryLight)),
+                    ]),
                   ),
-                  _field('Plate Number', _vehiclePlateCtrl),
-                  _field('Brand / Model', _vehicleModelCtrl),
-                  _field('Color', _vehicleColorCtrl),
-                  _saveBtn('Save Vehicle', _saveVehicle),
                 ]),
                 const SizedBox(height: 16),
-                _section('📄 License & Documents', [
-                  _field('License Number', _licenseNumCtrl),
-                  _field('License Expiry (YYYY-MM-DD)', _licenseExpiryCtrl),
-                  const SizedBox(height: 8),
-                  GestureDetector(
-                    onTap: _pickLicenseImage,
-                    child: Container(
-                      width: double.infinity,
-                      padding: const EdgeInsets.all(16),
-                      decoration: BoxDecoration(
-                        color: Colors.grey.shade100,
-                        borderRadius: BorderRadius.circular(8),
-                        border: Border.all(color: Colors.grey.shade300),
-                      ),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.center,
-                        children: [
-                          Icon(_licenseImage != null ? Icons.check_circle : Icons.camera_alt, 
-                              color: _licenseImage != null ? Colors.green : AppTheme.textLight, size: 32),
-                          const SizedBox(height: 8),
-                          Text(_licenseImage != null ? 'License photo selected' : 'Tap to upload license photo',
-                              style: TextStyle(fontSize: 12, color: AppTheme.textLight)),
-                        ],
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                  _saveBtn('Save License', _saveLicense),
-                ]),
-                const SizedBox(height: 16),
-                _section('🗓️ Availability Schedule', [
-                  Wrap(
-                    spacing: 8,
-                    runSpacing: 8,
-                    children: _schedule.keys.map((day) => FilterChip(
-                      label: Text(day),
-                      selected: _schedule[day] ?? true,
-                      onSelected: (v) => setState(() => _schedule[day] = v),
-                      selectedColor: AppTheme.primaryLight.withOpacity(0.2),
-                      checkmarkColor: AppTheme.primaryLight,
-                    )).toList(),
-                  ),
-                  const SizedBox(height: 8),
-                  _saveBtn('Save Schedule', _saveSchedule),
-                ]),
-                const SizedBox(height: 16),
+
+                // ── Logout ──────────────────────────────────────
                 SizedBox(
                   width: double.infinity,
                   child: OutlinedButton.icon(
                     onPressed: _logout,
                     icon: const Icon(Icons.logout, color: Colors.red),
                     label: const Text('Log out',
-                        style: TextStyle(
-                            fontSize: 15, fontWeight: FontWeight.w600,
-                            color: Colors.red)),
+                        style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600, color: Colors.red)),
                     style: OutlinedButton.styleFrom(
                       side: const BorderSide(color: Colors.red),
                       padding: const EdgeInsets.symmetric(vertical: 13),
-                      shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(10)),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
                     ),
                   ),
                 ),
@@ -434,9 +366,24 @@ class _RiderProfileScreenState extends State<RiderProfileScreen> {
 
   Widget _perfTile(String val, String label) => Expanded(
     child: Column(children: [
-      Text(val, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w700, color: AppTheme.textDark)),
+      Text(val, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700, color: AppTheme.textDark)),
       const SizedBox(height: 2),
       Text(label, style: const TextStyle(fontSize: 10, color: AppTheme.textLight), textAlign: TextAlign.center),
     ]),
+  );
+
+  Widget _earningTile(String label, String val, Color color) => Expanded(
+    child: Container(
+      padding: const EdgeInsets.symmetric(vertical: 10),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.08),
+        borderRadius: BorderRadius.circular(10),
+      ),
+      child: Column(children: [
+        Text(val, style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700, color: color)),
+        const SizedBox(height: 2),
+        Text(label, style: const TextStyle(fontSize: 10, color: AppTheme.textLight)),
+      ]),
+    ),
   );
 }

@@ -36,7 +36,6 @@ class _RiderDashboardScreenState extends State<RiderDashboardScreen> {
   String _token = '';
   Map<String, dynamic> _stats = {};
   List<Map<String, dynamic>> _deliveries = [];
-  List<Map<String, dynamic>> _history = [];
   bool _isLoading = true;
   StreamSubscription<void>? _sub;
   Timer? _debounce;
@@ -560,7 +559,7 @@ class _HomeTabState extends State<_HomeTab> {
                         Row(children: [
                           _stat('${widget.stats['active_deliveries'] ?? 0}', 'Active', Icons.sync_outlined, Colors.orange),
                           const SizedBox(width: 8),
-                          _stat('${widget.stats['completed_deliveries'] ?? 0}', 'Delivered', Icons.check_circle_outline, Colors.green),
+                          _stat('${widget.stats['total_deliveries'] ?? widget.stats['completed_deliveries'] ?? 0}', 'Total Done', Icons.check_circle_outline, Colors.green),
                         ]),
                         const SizedBox(height: 12),
                         Row(children: [
@@ -833,7 +832,7 @@ class _DeliveriesTabState extends State<_DeliveriesTab> {
 
   static const _filters = [
     ('all', 'All'),
-    ('ready_for_pickup', 'Ready'),
+    ('ready_for_pickup', 'Ready to Pick'),
     ('in_transit', 'In Transit'),
     ('delivered', 'Delivered'),
   ];
@@ -891,7 +890,14 @@ class _DeliveriesTabState extends State<_DeliveriesTab> {
 
   List<Map<String, dynamic>> get _filtered => _filter == 'all'
       ? _deliveries
-      : _deliveries.where((d) => d['status'] == _filter).toList();
+      : _deliveries.where((d) {
+          final status = d['status']?.toString() ?? '';
+          // Normalize: backend may return 'ready_for_pickup' or 'ready for pickup'
+          if (_filter == 'ready_for_pickup') {
+            return status == 'ready_for_pickup' || status == 'ready for pickup';
+          }
+          return status == _filter;
+        }).toList();
 
   @override
   Widget build(BuildContext context) {
@@ -933,7 +939,11 @@ class _DeliveriesTabState extends State<_DeliveriesTab> {
                 // count badge
                 final count = f.$1 == 'all'
                     ? _deliveries.length
-                    : _deliveries.where((d) => d['status'] == f.$1).length;
+                    : _deliveries.where((d) {
+                        final s = d['status']?.toString() ?? '';
+                        if (f.$1 == 'ready_for_pickup') return s == 'ready_for_pickup' || s == 'ready for pickup';
+                        return s == f.$1;
+                      }).length;
                 return GestureDetector(
                   onTap: () => setState(() => _filter = f.$1),
                   child: Container(
@@ -981,7 +991,11 @@ class _DeliveriesTabState extends State<_DeliveriesTab> {
                             const Icon(Icons.local_shipping_outlined, size: 48, color: AppTheme.textLight),
                             const SizedBox(height: 12),
                             Text(
-                              _filter == 'all' ? 'No deliveries available' : 'No ${_filter.replaceAll('_', ' ')} deliveries',
+                              _filter == 'all'
+                                  ? 'No deliveries available'
+                                  : _filter == 'ready_for_pickup'
+                                      ? 'No orders ready to pick up'
+                                      : 'No ${_filter.replaceAll('_', ' ')} deliveries',
                               style: const TextStyle(color: AppTheme.textLight),
                             ),
                             if (_lastError.isNotEmpty) ...[
@@ -1639,10 +1653,23 @@ class _EarningsTab extends StatefulWidget {
   State<_EarningsTab> createState() => _EarningsTabState();
 }
 
+// Earnings filter options
+enum _EarningsFilter { today, yesterday, thisWeek, thisMonth, custom }
+
 class _EarningsTabState extends State<_EarningsTab> {
   Map<String, dynamic> _data = {};
   bool _loading = true;
   bool _isExporting = false;
+  _EarningsFilter _filter = _EarningsFilter.thisMonth;
+  DateTimeRange? _customRange;
+
+  static const _filterLabels = {
+    _EarningsFilter.today: 'Today',
+    _EarningsFilter.yesterday: 'Yesterday',
+    _EarningsFilter.thisWeek: 'This Week',
+    _EarningsFilter.thisMonth: 'This Month',
+    _EarningsFilter.custom: 'Custom',
+  };
 
   @override
   void initState() {
@@ -1653,15 +1680,44 @@ class _EarningsTabState extends State<_EarningsTab> {
   @override
   void didUpdateWidget(_EarningsTab old) {
     super.didUpdateWidget(old);
-    if (old.token != widget.token && widget.token.isNotEmpty) { _load(); }
+    if (old.token != widget.token && widget.token.isNotEmpty) _load();
   }
+
+  // Returns [from, to] ISO date strings for the active filter
+  (String, String) _dateRange() {
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    switch (_filter) {
+      case _EarningsFilter.today:
+        return (_iso(today), _iso(today));
+      case _EarningsFilter.yesterday:
+        final y = today.subtract(const Duration(days: 1));
+        return (_iso(y), _iso(y));
+      case _EarningsFilter.thisWeek:
+        final start = today.subtract(Duration(days: today.weekday - 1));
+        return (_iso(start), _iso(today));
+      case _EarningsFilter.thisMonth:
+        return (_iso(DateTime(now.year, now.month, 1)), _iso(today));
+      case _EarningsFilter.custom:
+        if (_customRange != null) {
+          return (_iso(_customRange!.start), _iso(_customRange!.end));
+        }
+        return (_iso(DateTime(now.year, now.month, 1)), _iso(today));
+    }
+  }
+
+  String _iso(DateTime d) =>
+      '${d.year}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
 
   Future<void> _load() async {
     if (widget.token.isEmpty) return;
     setState(() => _loading = true);
     try {
+      final (from, to) = _dateRange();
+      final uri = Uri.parse('${ApiService.flaskBaseUrl}/api/rider/earnings')
+          .replace(queryParameters: {'from': from, 'to': to});
       final res = await http.get(
-        Uri.parse('${ApiService.flaskBaseUrl}/api/rider/earnings'),
+        uri,
         headers: {'Authorization': 'Bearer ${widget.token}'},
       ).timeout(const Duration(seconds: 10));
       final body = Map<String, dynamic>.from(jsonDecode(res.body) as Map);
@@ -1673,7 +1729,30 @@ class _EarningsTabState extends State<_EarningsTab> {
         });
       }
     } catch (_) {
-      if (mounted) { setState(() => _loading = false); }
+      if (mounted) setState(() => _loading = false);
+    }
+  }
+
+  Future<void> _pickCustomRange() async {
+    final now = DateTime.now();
+    final picked = await showDateRangePicker(
+      context: context,
+      firstDate: DateTime(now.year - 1),
+      lastDate: now,
+      initialDateRange: _customRange ?? DateTimeRange(
+        start: now.subtract(const Duration(days: 7)),
+        end: now,
+      ),
+      builder: (ctx, child) => Theme(
+        data: Theme.of(ctx).copyWith(
+          colorScheme: ColorScheme.light(primary: AppTheme.primaryLight),
+        ),
+        child: child!,
+      ),
+    );
+    if (picked != null && mounted) {
+      setState(() { _customRange = picked; _filter = _EarningsFilter.custom; });
+      _load();
     }
   }
 
@@ -1682,19 +1761,25 @@ class _EarningsTabState extends State<_EarningsTab> {
   @override
   Widget build(BuildContext context) {
     final history = List<Map<String, dynamic>>.from(_data['history'] ?? []);
+    // Use filtered history for accurate earnings — only count delivered orders
+    final deliveredHistory = history.where((h) =>
+        (h['status']?.toString() ?? 'delivered') == 'delivered' ||
+        h['status'] == null).toList();
+    final filteredTotal = deliveredHistory.fold<double>(
+        0.0, (sum, h) => sum + (double.tryParse(h['amount']?.toString() ?? '0') ?? 0.0));
     final todayEarnings = double.tryParse(_data['today']?.toString() ?? '0') ?? 0.0;
     const dailyGoal = 500.0;
     final goalPct = (todayEarnings / dailyGoal * 100).clamp(0, 100);
-    
-    // Calculate COD collected from history
-    final codCollected = history
+    final codCollected = deliveredHistory
         .where((h) => (h['payment_method']?.toString() ?? 'cod').toLowerCase() == 'cod')
         .fold<double>(0.0, (sum, h) => sum + (double.tryParse(h['order_total']?.toString() ?? '0') ?? 0.0));
+    final (fromLabel, toLabel) = _dateRange();
+    final rangeLabel = fromLabel == toLabel ? fromLabel : '$fromLabel → $toLabel';
 
     return SafeArea(
       child: Column(
         children: [
-          // Header with Export button
+          // Header
           Container(
             color: Colors.white,
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
@@ -1705,14 +1790,8 @@ class _EarningsTabState extends State<_EarningsTab> {
                 ElevatedButton.icon(
                   onPressed: _isExporting ? null : _exportEarnings,
                   icon: _isExporting
-                      ? const SizedBox(
-                          width: 16,
-                          height: 16,
-                          child: CircularProgressIndicator(
-                            color: Colors.white,
-                            strokeWidth: 2,
-                          ),
-                        )
+                      ? const SizedBox(width: 16, height: 16,
+                          child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
                       : const Icon(Icons.download, size: 16),
                   label: Text(_isExporting ? 'Exporting...' : 'Export', style: const TextStyle(fontSize: 12)),
                   style: ElevatedButton.styleFrom(
@@ -1725,160 +1804,208 @@ class _EarningsTabState extends State<_EarningsTab> {
               ],
             ),
           ),
+          // Filter chips
+          Container(
+            color: Colors.white,
+            padding: const EdgeInsets.fromLTRB(12, 0, 12, 10),
+            child: SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              child: Row(
+                children: [
+                  ..._EarningsFilter.values.map((f) {
+                    final active = _filter == f;
+                    return GestureDetector(
+                      onTap: () async {
+                        if (f == _EarningsFilter.custom) {
+                          await _pickCustomRange();
+                        } else {
+                          setState(() => _filter = f);
+                          _load();
+                        }
+                      },
+                      child: Container(
+                        margin: const EdgeInsets.only(right: 8),
+                        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
+                        decoration: BoxDecoration(
+                          color: active ? AppTheme.primaryLight : Colors.transparent,
+                          borderRadius: BorderRadius.circular(20),
+                          border: Border.all(color: active ? AppTheme.primaryLight : Colors.grey.shade300),
+                        ),
+                        child: Text(_filterLabels[f]!,
+                            style: TextStyle(
+                              fontSize: 12, fontWeight: FontWeight.w600,
+                              color: active ? Colors.white : AppTheme.textLight,
+                            )),
+                      ),
+                    );
+                  }),
+                ],
+              ),
+            ),
+          ),
+          if (_filter == _EarningsFilter.custom && _customRange != null)
+            Container(
+              color: Colors.white,
+              padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+              child: Text(rangeLabel,
+                  style: const TextStyle(fontSize: 11, color: AppTheme.textLight)),
+            ),
           const Divider(height: 1),
           Expanded(
             child: _loading
-          ? const Center(child: CircularProgressIndicator(color: AppTheme.primaryLight))
-          : RefreshIndicator(
-              onRefresh: _load,
-              child: CustomScrollView(slivers: [
-                // Earnings card
-                SliverToBoxAdapter(child: Padding(
-                  padding: const EdgeInsets.all(16),
-                  child: Container(
-                    padding: const EdgeInsets.all(20),
-                    decoration: BoxDecoration(
-                      gradient: const LinearGradient(colors: [Color(0xFF1a1a3e), Color(0xFF2d2d6e)],
-                          begin: Alignment.topLeft, end: Alignment.bottomRight),
-                      borderRadius: BorderRadius.circular(16),
-                    ),
-                    child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                      const Text('Total Earnings', style: TextStyle(fontSize: 12, color: Colors.white60)),
-                      const SizedBox(height: 4),
-                      Text('₱${_fmt(_data['total'])}',
-                          style: const TextStyle(fontSize: 34, fontWeight: FontWeight.w700, color: Colors.white)),
-                      const SizedBox(height: 16),
-                      Row(children: [
-                        _chip('Today', '₱${_fmt(_data['today'])}'),
-                        const SizedBox(width: 8),
-                        _chip('Week', '₱${_fmt(_data['week'])}'),
-                        const SizedBox(width: 8),
-                        _chip('Month', '₱${_fmt(_data['month'])}'),
-                      ]),
-                    ]),
-                  ),
-                )),
-
-                // Stats row
-                SliverToBoxAdapter(child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 16),
-                  child: Row(children: [
-                    _statCard('${_data['deliveries'] ?? 0}', 'Total Deliveries', Icons.local_shipping_outlined, Colors.blue),
-                    const SizedBox(width: 10),
-                    _statCard('₱${_fmt(codCollected)}', 'COD Collected', Icons.payments_outlined, Colors.green),
-                  ]),
-                )),
-
-                // Daily goal progress
-                SliverToBoxAdapter(child: Padding(
-                  padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
-                  child: Container(
-                    padding: const EdgeInsets.all(16),
-                    decoration: BoxDecoration(
-                      color: Colors.white,
-                      borderRadius: BorderRadius.circular(12),
-                      boxShadow: AppTheme.cardShadow,
-                    ),
-                    child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                      Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
-                        const Text('Daily Goal', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: AppTheme.textDark)),
-                        Text('₱${_fmt(todayEarnings)} / ₱${dailyGoal.toStringAsFixed(0)}',
-                            style: const TextStyle(fontSize: 12, color: AppTheme.textLight)),
-                      ]),
-                      const SizedBox(height: 8),
-                      ClipRRect(
-                        borderRadius: BorderRadius.circular(8),
-                        child: LinearProgressIndicator(
-                          value: goalPct / 100,
-                          minHeight: 10,
-                          backgroundColor: Colors.grey.shade200,
-                          valueColor: AlwaysStoppedAnimation<Color>(
-                            goalPct >= 100 ? Colors.green : (goalPct >= 50 ? Colors.orange : AppTheme.primaryLight),
+                ? const Center(child: CircularProgressIndicator(color: AppTheme.primaryLight))
+                : RefreshIndicator(
+                    onRefresh: _load,
+                    child: CustomScrollView(slivers: [
+                      // Earnings card
+                      SliverToBoxAdapter(child: Padding(
+                        padding: const EdgeInsets.all(16),
+                        child: Container(
+                          padding: const EdgeInsets.all(20),
+                          decoration: BoxDecoration(
+                            gradient: const LinearGradient(colors: [Color(0xFF1a1a3e), Color(0xFF2d2d6e)],
+                                begin: Alignment.topLeft, end: Alignment.bottomRight),
+                            borderRadius: BorderRadius.circular(16),
                           ),
-                        ),
-                      ),
-                      const SizedBox(height: 6),
-                      Text(
-                        goalPct >= 100 ? '🎉 Goal reached!' : (goalPct >= 50 ? 'More than halfway there!' : 'Keep going!'),
-                        style: TextStyle(fontSize: 11, color: Colors.grey.shade600),
-                      ),
-                    ]),
-                  ),
-                )),
-
-                // Chart
-                SliverToBoxAdapter(child: Padding(
-                  padding: const EdgeInsets.all(16),
-                  child: Container(
-                    padding: const EdgeInsets.all(16),
-                    decoration: BoxDecoration(
-                      color: Colors.white,
-                      borderRadius: BorderRadius.circular(12),
-                      boxShadow: AppTheme.cardShadow,
-                    ),
-                    child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                      const Text('Daily Earnings — Last 7 Days',
-                          style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: AppTheme.textDark)),
-                      const SizedBox(height: 12),
-                      _SimpleBarChart(data: List<Map<String, dynamic>>.from(_data['chart'] ?? [])),
-                    ]),
-                  ),
-                )),
-
-                // History header
-                const SliverToBoxAdapter(child: Padding(
-                  padding: EdgeInsets.fromLTRB(16, 4, 16, 8),
-                  child: Text('Earnings History', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: AppTheme.textDark)),
-                )),
-
-                // History list
-                history.isEmpty
-                    ? const SliverToBoxAdapter(child: Padding(
-                        padding: EdgeInsets.all(32),
-                        child: Center(child: Text('No earnings yet', style: TextStyle(color: AppTheme.textLight)))))
-                    : SliverList(delegate: SliverChildBuilderDelegate(
-                        (ctx, i) {
-                          final e = history[i];
-                          final payment = (e['payment_method']?.toString() ?? 'cod').toUpperCase();
-                          return Container(
-                            margin: const EdgeInsets.fromLTRB(16, 0, 16, 8),
-                            padding: const EdgeInsets.all(14),
-                            decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(12),
-                                boxShadow: AppTheme.cardShadow),
-                            child: Row(children: [
-                              const Icon(Icons.monetization_on_outlined, color: Colors.green, size: 20),
-                              const SizedBox(width: 10),
-                              Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                                Text('Order #${e['order_id'] ?? ''}',
-                                    style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13)),
-                                Text(e['created_at']?.toString().substring(0, 10) ?? '',
-                                    style: const TextStyle(fontSize: 11, color: AppTheme.textLight)),
-                                const SizedBox(height: 2),
-                                Row(children: [
-                                  Text('Order: ₱${_fmt(e['order_total'])}',
-                                      style: const TextStyle(fontSize: 11, color: AppTheme.textLight)),
-                                  const SizedBox(width: 8),
-                                  Container(
-                                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                                    decoration: BoxDecoration(
-                                      color: Colors.blue.shade50,
-                                      borderRadius: BorderRadius.circular(4),
-                                    ),
-                                    child: Text(payment,
-                                        style: TextStyle(fontSize: 9, color: Colors.blue.shade700, fontWeight: FontWeight.w600)),
-                                  ),
-                                ]),
-                              ])),
-                              Text('₱${_fmt(e['amount'])}',
-                                  style: const TextStyle(fontWeight: FontWeight.w700, color: Colors.green, fontSize: 14)),
+                          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                            Text(_filterLabels[_filter]! + ' Earnings',
+                                style: const TextStyle(fontSize: 12, color: Colors.white60)),
+                            const SizedBox(height: 4),
+                            Text('₱${_fmt(filteredTotal > 0 ? filteredTotal : _data['total'])}',
+                                style: const TextStyle(fontSize: 34, fontWeight: FontWeight.w700, color: Colors.white)),
+                            const SizedBox(height: 16),
+                            Row(children: [
+                              _chip('Today', '₱${_fmt(_data['today'])}'),
+                              const SizedBox(width: 8),
+                              _chip('Week', '₱${_fmt(_data['week'])}'),
+                              const SizedBox(width: 8),
+                              _chip('Month', '₱${_fmt(_data['month'])}'),
                             ]),
-                          );
-                        },
-                        childCount: history.length,
+                          ]),
+                        ),
                       )),
-                const SliverToBoxAdapter(child: SizedBox(height: 16)),
-              ]),
-            ),
+
+                      // Stats row — deliveries count from history (no duplicates)
+                      SliverToBoxAdapter(child: Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 16),
+                        child: Row(children: [
+                          _statCard('${deliveredHistory.length > 0 ? deliveredHistory.length : (_data['deliveries'] ?? 0)}',
+                              'Deliveries', Icons.local_shipping_outlined, Colors.blue),
+                          const SizedBox(width: 10),
+                          _statCard('₱${_fmt(codCollected)}', 'COD Collected', Icons.payments_outlined, Colors.green),
+                        ]),
+                      )),
+
+                      // Daily goal progress
+                      SliverToBoxAdapter(child: Padding(
+                        padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
+                        child: Container(
+                          padding: const EdgeInsets.all(16),
+                          decoration: BoxDecoration(
+                            color: Colors.white,
+                            borderRadius: BorderRadius.circular(12),
+                            boxShadow: AppTheme.cardShadow,
+                          ),
+                          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                            Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
+                              const Text('Daily Goal', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: AppTheme.textDark)),
+                              Text('₱${_fmt(todayEarnings)} / ₱${dailyGoal.toStringAsFixed(0)}',
+                                  style: const TextStyle(fontSize: 12, color: AppTheme.textLight)),
+                            ]),
+                            const SizedBox(height: 8),
+                            ClipRRect(
+                              borderRadius: BorderRadius.circular(8),
+                              child: LinearProgressIndicator(
+                                value: goalPct / 100,
+                                minHeight: 10,
+                                backgroundColor: Colors.grey.shade200,
+                                valueColor: AlwaysStoppedAnimation<Color>(
+                                  goalPct >= 100 ? Colors.green : (goalPct >= 50 ? Colors.orange : AppTheme.primaryLight),
+                                ),
+                              ),
+                            ),
+                            const SizedBox(height: 6),
+                            Text(
+                              goalPct >= 100 ? '🎉 Goal reached!' : (goalPct >= 50 ? 'More than halfway there!' : 'Keep going!'),
+                              style: TextStyle(fontSize: 11, color: Colors.grey.shade600),
+                            ),
+                          ]),
+                        ),
+                      )),
+
+                      // Chart
+                      SliverToBoxAdapter(child: Padding(
+                        padding: const EdgeInsets.all(16),
+                        child: Container(
+                          padding: const EdgeInsets.all(16),
+                          decoration: BoxDecoration(
+                            color: Colors.white,
+                            borderRadius: BorderRadius.circular(12),
+                            boxShadow: AppTheme.cardShadow,
+                          ),
+                          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                            const Text('Daily Earnings — Last 7 Days',
+                                style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: AppTheme.textDark)),
+                            const SizedBox(height: 12),
+                            _SimpleBarChart(data: List<Map<String, dynamic>>.from(_data['chart'] ?? [])),
+                          ]),
+                        ),
+                      )),
+
+                      // History header
+                      const SliverToBoxAdapter(child: Padding(
+                        padding: EdgeInsets.fromLTRB(16, 4, 16, 8),
+                        child: Text('Earnings History', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: AppTheme.textDark)),
+                      )),
+
+                      // History list
+                      deliveredHistory.isEmpty
+                          ? const SliverToBoxAdapter(child: Padding(
+                              padding: EdgeInsets.all(32),
+                              child: Center(child: Text('No earnings yet', style: TextStyle(color: AppTheme.textLight)))))
+                          : SliverList(delegate: SliverChildBuilderDelegate(
+                              (ctx, i) {
+                                final e = deliveredHistory[i];
+                                final payment = (e['payment_method']?.toString() ?? 'cod').toUpperCase();
+                                return Container(
+                                  margin: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+                                  padding: const EdgeInsets.all(14),
+                                  decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(12),
+                                      boxShadow: AppTheme.cardShadow),
+                                  child: Row(children: [
+                                    const Icon(Icons.monetization_on_outlined, color: Colors.green, size: 20),
+                                    const SizedBox(width: 10),
+                                    Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                                      Text('Order #${e['order_id'] ?? ''}',
+                                          style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13)),
+                                      Text(e['created_at']?.toString().substring(0, 10) ?? '',
+                                          style: const TextStyle(fontSize: 11, color: AppTheme.textLight)),
+                                      const SizedBox(height: 2),
+                                      Row(children: [
+                                        Text('Order: ₱${_fmt(e['order_total'])}',
+                                            style: const TextStyle(fontSize: 11, color: AppTheme.textLight)),
+                                        const SizedBox(width: 8),
+                                        Container(
+                                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                          decoration: BoxDecoration(
+                                            color: Colors.blue.shade50,
+                                            borderRadius: BorderRadius.circular(4),
+                                          ),
+                                          child: Text(payment,
+                                              style: TextStyle(fontSize: 9, color: Colors.blue.shade700, fontWeight: FontWeight.w600)),
+                                        ),
+                                      ]),
+                                    ])),
+                                    Text('₱${_fmt(e['amount'])}',
+                                        style: const TextStyle(fontWeight: FontWeight.w700, color: Colors.green, fontSize: 14)),
+                                  ]),
+                                );
+                              },
+                              childCount: deliveredHistory.length,
+                            )),
+                      const SliverToBoxAdapter(child: SizedBox(height: 16)),
+                    ]),
+                  ),
           ),
         ],
       ),
