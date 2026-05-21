@@ -251,7 +251,7 @@ function buildMarketCard(p) {
                 onclick="event.stopPropagation(); handleWishlistById('${p.id}', this)"
                 title="Wishlist">❤️</button>
         </div>
-        <h3 class="product-name" onclick="window.location='/buyer/product?id=${p.id}'" style="cursor:pointer">${p.name}</h3>
+        <h3 class="product-name" title="${p.name.replace(/"/g,'&quot;')}" onclick="window.location='/buyer/product?id=${p.id}'" style="cursor:pointer">${p.name}</h3>
         ${seller ? `<div style="font-size:11px;color:#999;margin-bottom:4px">by ${seller}</div>` : ''}
         <div class="product-price">
             <span class="current">₱${price}</span>
@@ -300,7 +300,7 @@ function renderProductCard(p) {
                         onclick="event.stopPropagation(); handleWishlistById('${p.id}', this)"
                         title="Wishlist">❤️</button>
                 </div>
-                <h3 class="product-name" onclick="window.location='/buyer/product?id=${p.id}'" style="cursor:pointer">${p.name}</h3>
+                <h3 class="product-name" title="${p.name.replace(/"/g,'&quot;')}" onclick="window.location='/buyer/product?id=${p.id}'" style="cursor:pointer">${p.name}</h3>
                 ${seller ? `<div style="font-size:11px;color:#999;margin-bottom:4px">by ${seller}</div>` : ''}
                 <div class="product-price">
                     <span class="current">₱${price}</span>
@@ -711,7 +711,7 @@ function buildWishlistCard(p) {
             <button class="wc-remove" onclick="event.stopPropagation(); _removeWishlistById('${p.id}')" title="Remove from wishlist">✕</button>
         </div>
         <div class="wc-body">
-            <h3 class="wc-name" onclick="window.location='/buyer/product?id=${p.id}'">${p.name}</h3>
+            <h3 class="wc-name" title="${p.name.replace(/"/g,'&quot;')}" onclick="window.location='/buyer/product?id=${p.id}'">${p.name}</h3>
             ${seller ? `<div class="wc-seller">by ${seller}</div>` : ''}
             <div class="wc-price">₱${price}</div>
             <div class="wc-stock ${stock > 0 ? 'in-stock' : 'out-stock'}">

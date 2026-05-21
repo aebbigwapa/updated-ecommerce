@@ -338,17 +338,23 @@ class _ShopScreenState extends State<ShopScreen> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Text(
-                    product.name,
-                    style: const TextStyle(
-                      fontFamily: AppTheme.fontBody,
-                      fontSize: 13,
-                      fontWeight: FontWeight.w600,
-                      color: AppTheme.textDark,
-                      height: 1.3,
+                  // Product name: 2-line clamp with ellipsis + tooltip on long-press
+                  Tooltip(
+                    message: product.name,
+                    preferBelow: true,
+                    triggerMode: TooltipTriggerMode.longPress,
+                    child: Text(
+                      product.name,
+                      style: const TextStyle(
+                        fontFamily: AppTheme.fontBody,
+                        fontSize: 13,
+                        fontWeight: FontWeight.w600,
+                        color: AppTheme.textDark,
+                        height: 1.3,
+                      ),
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
                     ),
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
                   ),
                   if (product.sellerName != null &&
                       product.sellerName!.isNotEmpty) ...[  

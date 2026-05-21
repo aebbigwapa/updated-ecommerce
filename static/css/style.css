@@ -515,6 +515,13 @@ a {
     color: var(--color-text-dark);
     margin-bottom: var(--spacing-sm);
     line-height: 1.3;
+    /* Truncate long product names to 2 lines with ellipsis */
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    word-break: break-word;
 }
 
 .product-price {
