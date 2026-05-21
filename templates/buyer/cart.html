@@ -45,7 +45,9 @@
         .ct-qty-btn { width:32px; height:32px; border:none; background:#f8f9fa; font-size:16px; cursor:pointer; display:flex; align-items:center; justify-content:center; transition:all .2s; color:#1a1a3e; }
         .ct-qty-btn:hover   { background:#ffe0f5; color:#FF2BAC; }
         .ct-qty-btn:disabled{ opacity:.4; cursor:not-allowed; }
-        .ct-qty-val { width:40px; text-align:center; font-size:14px; font-weight:600; color:#1a1a3e; background:#fff; border-left:1.5px solid #e8e8f0; border-right:1.5px solid #e8e8f0; padding:4px 0; }
+        .ct-qty-val { width:50px; text-align:center; font-size:14px; font-weight:600; color:#1a1a3e; background:#fff; border:none; border-left:1.5px solid #e8e8f0; border-right:1.5px solid #e8e8f0; padding:4px 0; outline:none; }
+        .ct-qty-val::-webkit-inner-spin-button, .ct-qty-val::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
+        .ct-qty-val { -moz-appearance: textfield; }
         .ct-remove { background:none; border:none; color:#adb5bd; font-size:18px; cursor:pointer; padding:4px; transition:color .2s; line-height:1; }
         .ct-remove:hover { color:#e74c3c; }
 
@@ -269,7 +271,9 @@ function renderItem(item) {
             <button class="ct-remove" onclick="removeItem('${item.id}')" title="Remove">&times;</button>
             <div class="ct-qty">
                 <button class="ct-qty-btn" onclick="changeQty('${item.id}', ${qty - 1})" ${qty <= 1 ? 'disabled' : ''}>&minus;</button>
-                <span class="ct-qty-val">${qty}</span>
+                <input type="number" class="ct-qty-val" value="${qty}" min="1" max="${maxStock}" 
+                       onchange="changeQty('${item.id}', parseInt(this.value) || 1)"
+                       onblur="if(!this.value || this.value < 1) this.value = 1; if(this.value > ${maxStock}) this.value = ${maxStock};">
                 <button class="ct-qty-btn" onclick="changeQty('${item.id}', ${qty + 1})" ${atMax ? 'disabled title="Maximum stock reached"' : ''}>+</button>
             </div>
         </div>
@@ -377,26 +381,37 @@ async function toggleSelectAll(selected) {
 
 // ── Change quantity ───────────────────────────────────────────
 async function changeQty(itemId, newQty) {
+    newQty = parseInt(newQty) || 1;
     if (newQty < 1) { removeItem(itemId); return; }
     const item = cartData.find(i => i.id === itemId);
     const maxStock = Number(item?.available_stock ?? 9999);
     if (newQty > maxStock) {
         showToast(`Maximum stock reached (${maxStock} available)`, true);
-        return;
+        // Reset input to max stock
+        const input = document.querySelector(`input[onchange*="'${itemId}'"]`);
+        if (input) input.value = maxStock;
+        newQty = maxStock;
     }
     if (item) {
         item.quantity = newQty;
-        document.getElementById('ctItems').innerHTML = cartData.map(renderItem).join('');
+        // Update the display without full re-render to preserve input focus
+        const qtyInput = document.querySelector(`input[onchange*="'${itemId}'"]`);
+        if (qtyInput && document.activeElement !== qtyInput) {
+            qtyInput.value = newQty;
+        }
         updateSummary(cartData);
     }
     const res = await API.buyer.updateCartItem(itemId, newQty).catch(() => ({ error: 'Network error' }));
     if (res && res.max !== undefined) {
         if (item) { item.quantity = res.max; item.available_stock = res.max; }
-        document.getElementById('ctItems').innerHTML = cartData.map(renderItem).join('');
+        const qtyInput = document.querySelector(`input[onchange*="'${itemId}'"]`);
+        if (qtyInput) qtyInput.value = res.max;
         updateSummary(cartData);
         showToast(`Only ${res.max} in stock.`, true);
     } else if (res && res.error) {
         showToast(res.error, true);
+        // Reload to get correct state
+        loadCartPage();
     }
     updateCartBadge();
 }

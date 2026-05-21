@@ -156,6 +156,8 @@
 
         /* ── Back button (mobile) ── */
         .back-btn { display: none; background: none; border: none; font-size: 20px; cursor: pointer; }
+        .back-to-site-btn { background: none; border: none; font-size: 14px; cursor: pointer; color: #6c757d; padding: 8px 12px; border-radius: 8px; transition: all .2s; display: flex; align-items: center; gap: 6px; }
+        .back-to-site-btn:hover { background: #f8f9fa; color: #1a1a3e; }
 
         /* ── Typing indicator ── */
         .typing-indicator { font-size: 12px; color: #adb5bd; padding: 0 20px 8px; }
@@ -194,7 +196,8 @@
     <!-- Conversation Sidebar -->
     <div class="conv-sidebar" id="convSidebar">
         <div class="conv-header">
-            <h2>💬 Messages</h2>
+            <button class="back-to-site-btn" onclick="window.location.href='/buyer/market'" title="Back to Shop">← Back</button>
+            <h2 style="flex:1">💬 Messages</h2>
             <button class="new-chat-btn" onclick="openNewChat()">+ New</button>
         </div>
         <div class="conv-search">
@@ -246,7 +249,7 @@
 </div>
 
 <script>
-const ME = {{ session.user | tojson }};
+const ME = {{ session.user | tojson | safe }} || null;
 let activeConvId = null;
 let allConversations = [];
 let pollTimer = null;
@@ -341,7 +344,9 @@ async function openConversation(convId) {
 
     // Update sidebar active state
     document.querySelectorAll('.conv-item').forEach(el => el.classList.remove('active'));
-    document.querySelector(`.conv-item[onclick="openConversation('${convId}')"]`)?.classList.add('active');
+    const selector = `.conv-item[onclick*="openConversation('${convId}')"]`;
+    const activeItem = document.querySelector(selector);
+    if (activeItem) activeItem.classList.add('active');
 
     // Find conversation data
     const conv = allConversations.find(c => c.id === convId);

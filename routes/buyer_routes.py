@@ -570,7 +570,21 @@ def api_buy_now_checkout():
     product_id = item['product_id']
     variant_id = item.get('variant_id')
     quantity = int(item['quantity'])
-    unit_price = float(item['unit_price'])
+
+    # ✅ SECURITY FIX: Re-fetch product and validate price from database
+    product = product_model.get_by_id(product_id)
+    if not product or product.get('status') != 'active':
+        return api_error('Product is no longer available', status=400)
+
+    # ✅ Get REAL price from database, don't trust session
+    variants = product.get('product_variants') or []
+    if variant_id:
+        variant = next((v for v in variants if v['id'] == variant_id), None)
+        if not variant:
+            return api_error('Selected variant not found', status=400)
+        unit_price = float(variant.get('final_price') or variant.get('price') or product.get('price') or 0)
+    else:
+        unit_price = float(product.get('price') or 0)
 
     # Re-validate stock before any DB writes
     if not order_model._check_stock_availability(product_id, variant_id, quantity):
@@ -581,7 +595,7 @@ def api_buy_now_checkout():
         'product_id': product_id,
         'variant_id': variant_id,
         'quantity': quantity,
-        'unit_price': unit_price,
+        'unit_price': unit_price,  # ✅ Use validated price
         'total_price': total_amount,
     }]
 
