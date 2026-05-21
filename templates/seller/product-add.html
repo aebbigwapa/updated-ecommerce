@@ -1,0 +1,163 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Grande Seller — Add Product</title>
+    <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@600;700&family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/dashboard.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/seller.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/product-form.css') }}">
+</head>
+<body>
+
+<div id="sidebarOverlay"></div>
+<button class="sidebar-toggle" id="sidebarToggle">&#9776;</button>
+
+<aside class="sidebar">
+    <div class="sidebar-logo">Grande Seller</div>
+    <ul class="sidebar-menu">
+        <li><a href="/seller"><span class="icon">🏠</span> Dashboard</a></li>
+        <li class="menu-group">STORE</li>
+        <li><a href="/seller/products" class="active"><span class="icon">📦</span> Products</a></li>
+        <li><a href="/seller/orders"><span class="icon">🛒</span> Orders</a></li>
+        <li><a href="/seller/shipping"><span class="icon">🚚</span> Shipping</a></li>
+        <li class="menu-group">FINANCE</li>
+        <li><a href="/seller/earnings"><span class="icon">💰</span> Earnings</a></li>
+        <li class="menu-group">PROFILE</li>
+        <li><a href="/seller/store"><span class="icon">🏬</span> Store Profile</a></li>
+        <li><a href="/seller/reviews"><span class="icon">⭐</span> Reviews</a></li>
+    </ul>
+    <div class="sidebar-footer">
+        <div class="sidebar-user">🏪 {{ session.user.name }}</div>
+        <a href="/logout" class="logout-link">🚪 Logout</a>
+    </div>
+</aside>
+
+<div class="main">
+    <div class="topbar">
+        <div class="topbar-title">Add New Product</div>
+        <div class="topbar-right">Seller Panel</div>
+    </div>
+    <div class="content" style="padding:20px">
+
+        <!-- Step indicators -->
+        <div class="pf-stepper">
+            <div class="pf-step active" id="pf-ind1">
+                <div class="pf-step-circle">1</div>
+                <div class="pf-step-label">Basic Info</div>
+            </div>
+            <div class="pf-step-line"></div>
+            <div class="pf-step" id="pf-ind2">
+                <div class="pf-step-circle">2</div>
+                <div class="pf-step-label">Variants</div>
+            </div>
+            <div class="pf-step-line"></div>
+            <div class="pf-step" id="pf-ind3">
+                <div class="pf-step-circle">3</div>
+                <div class="pf-step-label">Images</div>
+            </div>
+            <div class="pf-step-line"></div>
+            <div class="pf-step" id="pf-ind4">
+                <div class="pf-step-circle">4</div>
+                <div class="pf-step-label">Review</div>
+            </div>
+        </div>
+
+        <div class="pf-alert pf-alert-error" id="pfError" style="display:none"></div>
+
+        <!-- ══ STEP 1: Basic Info ══ -->
+        <div class="pf-card" id="pfStep1">
+            <div class="pf-card-title">📝 Basic Information</div>
+
+            <div class="pf-field">
+                <label class="pf-label">Product Name <span class="pf-req">*</span></label>
+                <input type="text" id="pfName" class="pf-input" placeholder="e.g. Floral Wrap Dress">
+            </div>
+
+            <div class="pf-field">
+                <label class="pf-label">Description</label>
+                <textarea id="pfDesc" class="pf-input pf-textarea" placeholder="Describe your product — material, fit, occasion..."></textarea>
+            </div>
+
+            <div class="pf-field">
+                <label class="pf-label">Category</label>
+                <input type="text" id="pfCategory" class="pf-input" readonly
+                       value="{{ category or '' }}"
+                       style="background:#f8f9fa;cursor:not-allowed;color:#666">
+                <div class="pf-hint">Your store category is fixed based on your registration.</div>
+            </div>
+
+            
+            <div class="pf-actions">
+                <a href="/seller/products" class="pf-btn pf-btn-ghost">Cancel</a>
+                <button type="button" class="pf-btn pf-btn-primary" onclick="pfGoTo(2)">Next → Variants</button>
+            </div>
+        </div>
+
+        <!-- ══ STEP 2: Variants ══ -->
+        <div class="pf-card" id="pfStep2" style="display:none">
+            <div class="pf-card-title">🎨 Variants</div>
+            <p class="pf-sub">Add size and color variants for your product. Each variant has its own price, stock, and optional discount.</p>
+
+            <!-- Product Discount Section -->
+            <div class="pf-field-group" style="margin-bottom: 20px;">
+                <label>Product Discount (Optional)</label>
+                <div style="display: flex; gap: 10px; align-items: center;">
+                    <select id="pfProductDiscountType" style="flex: 1;">
+                        <option value="none">No Discount</option>
+                        <option value="percentage">Percentage (%)</option>
+                        <option value="fixed_amount">Fixed Amount (₱)</option>
+                    </select>
+                    <input type="number" id="pfProductDiscountValue" placeholder="0.00" min="0" step="0.01" style="flex: 1; display: none;">
+                </div>
+                <small id="pfProductDiscountPreview" style="color: #28a745; display: block; margin-top: 5px;"></small>
+            </div>
+
+            <div id="pfVariantList"></div>
+
+            <button type="button" class="pf-add-btn" id="pfAddVariantBtn" onclick="pfAddVariant()">
+                + Add Variant
+            </button>
+            <div class="pf-hint" style="margin-top:8px">Maximum 10 variants. Each variant must have size and color.</div>
+
+            <div class="pf-actions">
+                <button type="button" class="pf-btn pf-btn-ghost" onclick="pfGoTo(1)">← Back</button>
+                <button type="button" class="pf-btn pf-btn-primary" onclick="pfGoTo(3)">Next → Images</button>
+            </div>
+        </div>
+
+        <!-- ══ STEP 3: Images ══ -->
+        <div class="pf-card" id="pfStep3" style="display:none">
+            <div class="pf-card-title">📷 Images per Variant</div>
+            <p class="pf-sub">Upload an image for each variant. You can also add general product images.</p>
+
+            <div id="pfImageSections"></div>
+
+            <div class="pf-actions">
+                <button type="button" class="pf-btn pf-btn-ghost" onclick="pfGoTo(2)">← Back</button>
+                <button type="button" class="pf-btn pf-btn-primary" onclick="pfGoTo(4)">Next → Review</button>
+            </div>
+        </div>
+
+        <!-- ══ STEP 4: Review ══ -->
+        <div class="pf-card" id="pfStep4" style="display:none">
+            <div class="pf-card-title">✅ Review & Submit</div>
+            <p class="pf-sub">Review your product before submitting for admin approval.</p>
+
+            <div id="pfReviewContent"></div>
+
+            <div class="pf-actions">
+                <button type="button" class="pf-btn pf-btn-ghost" onclick="pfGoTo(3)">← Back</button>
+                <button type="button" class="pf-btn pf-btn-primary" id="pfSubmitBtn" onclick="pfSubmit()">🚀 Submit for Approval</button>
+            </div>
+        </div>
+
+    </div>
+</div>
+
+<div class="toast" id="toast"></div>
+<script src="{{ url_for('static', filename='js/api.js') }}"></script>
+<script src="{{ url_for('static', filename='js/product-form.js') }}"></script>
+</body>
+</html>

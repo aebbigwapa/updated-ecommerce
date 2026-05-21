@@ -1,0 +1,688 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="csrf-token" content="{{ csrf_token() }}">
+    <title>Grande — My Cart</title>
+    <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;500;600;700&family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/shop.css') }}">
+    <style>
+        body { background: #f8f9fa; }
+        .ct-page-header { padding: 28px 0 8px; }
+        .ct-page-title  { font-family:'Playfair Display',serif; font-size:28px; font-weight:700; color:#1a1a3e; }
+        .ct-steps { display:flex; align-items:center; gap:0; margin-bottom:28px; }
+        .ct-step  { display:flex; flex-direction:column; align-items:center; gap:5px; flex:1; position:relative; }
+        .ct-step::after { content:''; position:absolute; top:15px; left:50%; width:100%; height:2px; background:#e8e8f0; z-index:0; }
+        .ct-step:last-child::after { display:none; }
+        .ct-step-circle { width:30px; height:30px; border-radius:50%; border:2px solid #e8e8f0; background:#fff; font-size:12px; font-weight:700; display:flex; align-items:center; justify-content:center; position:relative; z-index:1; transition:all .2s; color:#6c757d; }
+        .ct-step.active .ct-step-circle { background:#FF2BAC; border-color:#FF2BAC; color:#fff; }
+        .ct-step.done   .ct-step-circle { background:#10b981; border-color:#10b981; color:#fff; }
+        .ct-step-label { font-size:11px; color:#6c757d; }
+        .ct-step.active .ct-step-label  { color:#FF2BAC; font-weight:600; }
+
+        /* Cart item card */
+        .ct-item { 
+            background:#fff; 
+            border:1px solid #e8e8f0; 
+            border-radius:14px; 
+            padding:16px; 
+            margin-bottom:12px; 
+            transition:box-shadow .2s, border-color .2s; 
+            display: flex; 
+            flex-wrap: wrap; 
+            gap: 12px;
+        }
+        .ct-item:hover { box-shadow:0 4px 16px rgba(0,0,0,.07); }
+        .ct-item.ct-selected { border-color:#FF2BAC; background:#fff8fd; }
+        .ct-item-img { 
+            width:88px; 
+            height:88px; 
+            border-radius:10px; 
+            background:#f8f9fa; 
+            overflow:hidden; 
+            flex-shrink:0; 
+            border:1px solid #e8e8f0; 
+            display:flex; 
+            align-items:center; 
+            justify-content:center; 
+            font-size:32px; 
+        }
+        .ct-item-img img { width:100%; height:100%; object-fit:cover; }
+        .ct-item-name    { 
+            font-size:14px; 
+            font-weight:600; 
+            color:#1a1a3e; 
+            line-height:1.4; 
+            margin-bottom:4px; 
+            flex: 1 1 160px; 
+            word-break: break-word;
+        }
+        .ct-item-variant { font-size:12px; color:#6c757d; margin-bottom:6px; }
+        .ct-item-price   { font-size:16px; font-weight:700; color:#FF2BAC; }
+        .ct-item-subtotal{ font-size:13px; color:#6c757d; margin-top:2px; }
+        .ct-stock-hint   { font-size:11px; margin-top:3px; }
+        .ct-stock-max    { color:#e74c3c; }
+        .ct-stock-ok     { color:#adb5bd; }
+
+        /* Checkbox */
+        .ct-check { width:20px; height:20px; accent-color:#FF2BAC; cursor:pointer; flex-shrink:0; margin-top:2px; }
+
+        /* Qty control */
+        .ct-qty { display:flex; align-items:center; border:1.5px solid #e8e8f0; border-radius:8px; overflow:hidden; width:fit-content; }
+        .ct-qty-btn { 
+            width:32px; 
+            height:32px; 
+            border:none; 
+            background:#f8f9fa; 
+            font-size:16px; 
+            cursor:pointer; 
+            display:flex; 
+            align-items:center; 
+            justify-content:center; 
+            transition:all .2s; 
+            color:#1a1a3e;
+            font-weight: 600;
+            padding: 0;
+        }
+        .ct-qty-btn:hover { 
+            background:#ffe0f5; 
+            color:#FF2BAC; 
+        }
+        .ct-qty-btn:disabled { 
+            opacity:.4; 
+            cursor:not-allowed; 
+            background:#f8f9fa;
+        }
+        .ct-qty-val { width:50px; text-align:center; font-size:14px; font-weight:600; color:#1a1a3e; background:#fff; border:none; border-left:1.5px solid #e8e8f0; border-right:1.5px solid #e8e8f0; padding:4px 0; outline:none; }
+        .ct-qty-val::-webkit-inner-spin-button, .ct-qty-val::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
+        .ct-qty-val { -moz-appearance: textfield; }
+        .ct-remove { background:none; border:none; color:#adb5bd; font-size:18px; cursor:pointer; padding:4px; transition:color .2s; line-height:1; }
+        .ct-remove:hover { color:#e74c3c; }
+
+        /* Summary */
+        .ct-summary { background:#fff; border:1px solid #e8e8f0; border-radius:14px; padding:22px; position:sticky; top:76px; }
+        .ct-summary-title { font-size:15px; font-weight:700; color:#1a1a3e; margin-bottom:18px; padding-bottom:14px; border-bottom:1px solid #e8e8f0; }
+        .ct-summary-row { display:flex; justify-content:space-between; font-size:14px; color:#6c757d; margin-bottom:10px; }
+        .ct-summary-row.total { font-size:16px; font-weight:700; color:#1a1a3e; border-top:1px solid #e8e8f0; padding-top:14px; margin-top:6px; }
+        .ct-summary-row.total span:last-child { color:#FF2BAC; }
+
+        /* Checkout button */
+        .ct-checkout-btn {
+            width:100%; padding:14px;
+            background:linear-gradient(135deg,#FF2BAC,#FF6BCE);
+            color:#fff; border:none; border-radius:10px;
+            font-size:15px; font-weight:600; cursor:pointer;
+            transition:all .2s; margin-top:16px; display:block; text-align:center;
+        }
+        .ct-checkout-btn:hover:not(:disabled) { box-shadow:0 8px 24px rgba(255,43,172,.3); transform:translateY(-1px); }
+        .ct-checkout-btn:disabled { background:#adb5bd; cursor:not-allowed; transform:none; box-shadow:none; }
+
+        .ct-free-ship { font-size:12px; color:#10b981; text-align:center; margin-top:10px; font-weight:500; }
+        .ct-ship-progress { height:4px; background:#e8e8f0; border-radius:4px; margin-top:8px; overflow:hidden; }
+        .ct-ship-bar { height:100%; background:linear-gradient(90deg,#FF2BAC,#FF6BCE); border-radius:4px; transition:width .4s ease; }
+
+        /* Select-all bar */
+        .ct-select-bar { background:#fff; border:1px solid #e8e8f0; border-radius:10px; padding:10px 16px; margin-bottom:12px; display:flex; align-items:center; gap:10px; }
+        .ct-select-bar label { font-size:13px; font-weight:600; color:#1a1a3e; cursor:pointer; margin:0; }
+
+        /* Empty / skeleton */
+        .ct-empty { text-align:center; padding:80px 20px; }
+        .ct-empty-icon { font-size:64px; margin-bottom:16px; }
+        .ct-empty h4 { font-family:'Playfair Display',serif; font-size:22px; color:#1a1a3e; margin-bottom:8px; }
+        .ct-empty p  { font-size:14px; color:#6c757d; margin-bottom:24px; }
+        .ct-shop-btn { background:linear-gradient(135deg,#FF2BAC,#FF6BCE); color:#fff; border:none; border-radius:10px; padding:12px 28px; font-size:14px; font-weight:600; text-decoration:none; display:inline-block; transition:all .2s; }
+        .ct-shop-btn:hover { box-shadow:0 8px 24px rgba(255,43,172,.3); color:#fff; transform:translateY(-1px); }
+        .ct-skeleton { background:#f0f0f0; border-radius:8px; animation:ct-pulse 1.4s ease-in-out infinite; }
+        @keyframes ct-pulse { 0%,100%{opacity:1} 50%{opacity:.5} }
+        
+        /* Toast notifications */
+        .shop-toast {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            background: #1a1a3e;
+            color: #fff;
+            padding: 12px 16px;
+            border-radius: 10px;
+            font-size: 13px;
+            font-weight: 500;
+            box-shadow: 0 4px 20px rgba(0,0,0,.15);
+            z-index: 9999;
+            display: none;
+            align-items: center;
+            gap: 8px;
+            max-width: 320px;
+            animation: toastSlideIn 0.3s ease;
+        }
+        .shop-toast.error {
+            background: #e74c3c;
+        }
+        .shop-toast.success {
+            background: #10b981;
+        }
+        @keyframes toastSlideIn {
+            from { transform: translateX(100%); opacity: 0; }
+            to { transform: translateX(0); opacity: 1; }
+        }
+        @keyframes toastFadeOut {
+            from { opacity: 1; }
+            to { opacity: 0; }
+        }
+        @media (max-width:576px) {
+            .ct-item-img { width:70px; height:70px; }
+            .ct-item-name { 
+                font-size:13px; 
+                flex: 1 1 100%; 
+                margin-bottom: 8px;
+            }
+            .ct-item-price { font-size:15px; }
+            .ct-summary { position:static; }
+            .ct-qty-btn { 
+                flex: 0 0 auto; 
+                margin-left: auto;
+            }
+        }
+        @media (max-width:480px) {
+            .ct-item {
+                flex-direction: column;
+                align-items: flex-start;
+            }
+            .ct-item-name {
+                order: 1;
+                width: 100%;
+            }
+            .ct-item-price, .ct-item-subtotal, .ct-stock-hint {
+                order: 2;
+            }
+            .ct-qty {
+                order: 3;
+                margin-top: 8px;
+                width: 100%;
+                justify-content: flex-start;
+            }
+        }
+    </style>
+</head>
+<body>
+
+{% from 'buyer/_navbar.html' import grande_navbar %}
+{{ grande_navbar(user=session.get('user'), active='cart') }}
+
+<div class="container pb-5">
+
+    <div class="ct-page-header">
+        <h1 class="ct-page-title">My Cart</h1>
+    </div>
+
+    <!-- Step indicator -->
+    <div class="ct-steps mb-4">
+        <div class="ct-step active">
+            <div class="ct-step-circle">1</div>
+            <div class="ct-step-label">Cart</div>
+        </div>
+        <div class="ct-step">
+            <div class="ct-step-circle">2</div>
+            <div class="ct-step-label">Checkout</div>
+        </div>
+        <div class="ct-step">
+            <div class="ct-step-circle">3</div>
+            <div class="ct-step-label">Confirmation</div>
+        </div>
+    </div>
+
+    <!-- Loading skeleton -->
+    <div id="ctLoading">
+        <div class="row g-4">
+            <div class="col-12 col-lg-8">
+                {% for _ in range(3) %}
+                <div class="ct-item d-flex gap-3 mb-3">
+                    <div class="ct-skeleton" style="width:88px;height:88px;border-radius:10px;flex-shrink:0"></div>
+                    <div class="flex-grow-1">
+                        <div class="ct-skeleton mb-2" style="height:16px;width:60%"></div>
+                        <div class="ct-skeleton mb-2" style="height:12px;width:35%"></div>
+                        <div class="ct-skeleton" style="height:20px;width:25%"></div>
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+            <div class="col-12 col-lg-4">
+                <div class="ct-summary">
+                    <div class="ct-skeleton mb-3" style="height:18px;width:50%"></div>
+                    <div class="ct-skeleton mb-2" style="height:14px"></div>
+                    <div class="ct-skeleton mb-2" style="height:14px"></div>
+                    <div class="ct-skeleton mt-3" style="height:48px;border-radius:10px"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Empty state -->
+    <div id="ctEmpty" style="display:none">
+        <div class="ct-empty">
+            <div class="ct-empty-icon">🛒</div>
+            <h4>Your cart is empty</h4>
+            <p>Looks like you haven't added anything yet.<br>Explore our collection and find something you love!</p>
+            <a href="/buyer/market" class="ct-shop-btn">Browse Products</a>
+        </div>
+    </div>
+
+    <!-- Cart content -->
+    <div id="ctContent" style="display:none">
+        <div class="row g-4">
+
+            <div class="col-12 col-lg-8">
+                <div class="d-flex justify-content-between align-items-center mb-2">
+                    <span id="ctItemCount" style="font-size:14px;color:#6c757d;font-weight:500"></span>
+                    <button id="clearAllBtn" style="background:none;border:none;font-size:13px;color:#adb5bd;cursor:pointer">
+                        🗑 Clear all
+                    </button>
+                </div>
+
+                <!-- Select All bar -->
+                <div class="ct-select-bar">
+                    <input type="checkbox" id="selectAllChk" class="ct-check" title="Select all">
+                    <label for="selectAllChk">Select All</label>
+                    <span id="ctSelectedCount" style="font-size:12px;color:#6c757d;margin-left:auto"></span>
+                </div>
+
+                <div id="ctItems"></div>
+            </div>
+
+            <div class="col-12 col-lg-4">
+                <div class="ct-summary">
+                    <div class="ct-summary-title">Order Summary</div>
+                    <div class="ct-summary-row">
+                        <span>Subtotal (<span id="ctSumCount">0</span> selected)</span>
+                        <span id="ctSubtotal">₱0.00</span>
+                    </div>
+                    <div class="ct-summary-row">
+                        <span>Shipping</span>
+                        <span id="ctShipping">₱50.00</span>
+                    </div>
+                    <div class="ct-summary-row total">
+                        <span>Total</span>
+                        <span id="ctTotal">₱0.00</span>
+                    </div>
+                    <div id="ctShipMsg" class="ct-free-ship mt-2"></div>
+                    <div class="ct-ship-progress mt-1">
+                        <div class="ct-ship-bar" id="ctShipBar" style="width:0%"></div>
+                    </div>
+
+                    <!-- Checkout button — disabled until items are selected -->
+                    <button id="ctCheckoutBtn" class="ct-checkout-btn" disabled onclick="goToCheckout()">
+                        Checkout (0 items) →
+                    </button>
+                    <div style="font-size:12px;color:#adb5bd;text-align:center;margin-top:12px">
+                        🔒 Secure checkout &nbsp;·&nbsp; Free shipping over ₱500
+                    </div>
+                </div>
+            </div>
+
+        </div>
+    </div>
+
+</div>
+
+<div class="shop-toast" id="shopToast"></div>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+<script src="{{ url_for('static', filename='js/api.js') }}"></script>
+<script src="{{ url_for('static', filename='js/shop.js') }}"></script>
+<script>
+let cartData = [];
+
+function imgUrl(path) {
+    if (!path) return null;
+    if (path.startsWith('http://') || path.startsWith('https://')) return path;
+    return path.startsWith('/') ? path : '/' + path;
+}
+
+function fmt(amount) {
+    return '\u20b1' + Number(amount || 0).toLocaleString('en-PH', { minimumFractionDigits: 2 });
+}
+
+// ── Render one cart item ──────────────────────────────────────
+function renderItem(item) {
+    const img      = imgUrl(item.image);
+    const name     = item.product_name || item.name || 'Product';
+    const price    = Number(item.price || item.price_snapshot || 0);
+    const qty      = Number(item.quantity || 1);
+    const sub      = price * qty;
+    const maxStock = Number(item.available_stock ?? 9999);
+    const atMax    = qty >= maxStock;
+    const selected = !!item.is_selected;
+
+    const variantVal  = item.variant_value || item.variant || '';
+    const variantHtml = variantVal ? `<div class="ct-item-variant">Color: ${variantVal}</div>` : '';
+
+    const stockHtml = atMax
+        ? `<div class="ct-stock-hint ct-stock-max">Max stock reached (${maxStock})</div>`
+        : `<div class="ct-stock-hint ct-stock-ok">${maxStock} in stock</div>`;
+
+    const imgHtml = img
+        ? `<img src="${img}" alt="${name}" onerror="this.parentElement.textContent='?'">`
+        : '?';
+
+    return `
+    <div class="ct-item d-flex gap-3 align-items-start ${selected ? 'ct-selected' : ''}" id="item-${item.id}">
+        <input type="checkbox" class="ct-check mt-1" id="chk-${item.id}"
+               ${selected ? 'checked' : ''}
+               onchange="toggleItemSelection('${item.id}', this.checked)">
+        <div class="ct-item-img">${imgHtml}</div>
+        <div class="flex-grow-1 min-w-0">
+            <div class="ct-item-name text-truncate">${name}</div>
+            ${variantHtml}
+            <div class="ct-item-price">${fmt(price)}</div>
+            <div class="ct-item-subtotal">Subtotal: <strong style="color:#1a1a3e">${fmt(sub)}</strong></div>
+            ${stockHtml}
+        </div>
+        <div class="d-flex flex-column align-items-end justify-content-between flex-shrink-0">
+            <button class="ct-remove" onclick="removeItem('${item.id}')" title="Remove">&times;</button>
+            <div class="ct-qty">
+                <button class="ct-qty-btn" onclick="changeQtyByDelta('${item.id}', -1)" ${qty <= 1 ? 'disabled' : ''}>&minus;</button>
+                <input type="number" class="ct-qty-val" value="${qty}" min="1" max="${maxStock}" 
+                       onblur="validateCartQtyInput(this, '${item.id}', ${maxStock})">
+                <button class="ct-qty-btn" onclick="changeQtyByDelta('${item.id}', 1)" ${atMax ? 'disabled title="Maximum stock reached"' : ''}>+</button>
+            </div>
+            <div id="qty-error-${item.id}" style="display:none;color:#e74c3c;font-size:11px;margin-top:2px;text-align:right;"></div>
+        </div>
+    </div>`;
+}
+
+// ── Render full cart ──────────────────────────────────────────
+function renderCart(cart) {
+    document.getElementById('ctLoading').style.display = 'none';
+    if (!cart.length) {
+        document.getElementById('ctEmpty').style.display   = 'block';
+        document.getElementById('ctContent').style.display = 'none';
+        return;
+    }
+    document.getElementById('ctEmpty').style.display   = 'none';
+    document.getElementById('ctContent').style.display = 'block';
+    document.getElementById('ctItemCount').textContent =
+        `${cart.length} item${cart.length !== 1 ? 's' : ''} in your cart`;
+    document.getElementById('ctItems').innerHTML = cart.map(renderItem).join('');
+    updateSummary(cart);
+    syncSelectAllCheckbox(cart);
+}
+
+// ── Summary — based on SELECTED items only ────────────────────
+function updateSummary(cart) {
+    const selected  = cart.filter(i => i.is_selected);
+    const subtotal  = selected.reduce((s, i) => s + Number(i.price || i.price_snapshot || 0) * Number(i.quantity || 0), 0);
+    const shipping  = selected.length > 0 ? (subtotal >= 500 ? 0 : 50) : 0;
+    const total     = subtotal + shipping;
+    const totalQty  = selected.reduce((s, i) => s + Number(i.quantity || 0), 0);
+
+    document.getElementById('ctSubtotal').textContent = fmt(subtotal);
+    document.getElementById('ctShipping').textContent = shipping === 0 && selected.length > 0 ? 'FREE' : fmt(shipping);
+    document.getElementById('ctTotal').textContent    = fmt(total);
+    document.getElementById('ctSumCount').textContent = totalQty;
+
+    const progress = Math.min(100, (subtotal / 500) * 100);
+    document.getElementById('ctShipBar').style.width = progress + '%';
+    document.getElementById('ctShipMsg').textContent = subtotal >= 500
+        ? 'You\'ve unlocked free shipping!'
+        : selected.length > 0 ? `Add ${fmt(500 - subtotal)} more for free shipping` : '';
+
+    // Update checkout button
+    const btn = document.getElementById('ctCheckoutBtn');
+    btn.disabled = selected.length === 0;
+    btn.textContent = selected.length > 0
+        ? `Checkout (${selected.length} item${selected.length !== 1 ? 's' : ''}) →`
+        : 'Checkout (0 items) →';
+
+    // Update selected count label
+    document.getElementById('ctSelectedCount').textContent =
+        selected.length > 0 ? `${selected.length} of ${cart.length} selected` : '';
+
+    // Update navbar cart badge (total items, not just selected)
+    const allQty = cart.reduce((s, i) => s + Number(i.quantity || 0), 0);
+    document.querySelectorAll('.cart-count').forEach(el => {
+        el.textContent = allQty;
+        el.style.display = allQty > 0 ? 'flex' : 'none';
+    });
+}
+
+// ── Keep Select All checkbox in sync ─────────────────────────
+function syncSelectAllCheckbox(cart) {
+    const chk = document.getElementById('selectAllChk');
+    if (!chk) return;
+    const allSelected = cart.length > 0 && cart.every(i => i.is_selected);
+    const someSelected = cart.some(i => i.is_selected);
+    chk.checked       = allSelected;
+    chk.indeterminate = someSelected && !allSelected;
+}
+
+// ── Toggle single item selection (persisted server-side) ──────
+async function toggleItemSelection(itemId, selected) {
+    const item = cartData.find(i => i.id === itemId);
+    if (!item) return;
+
+    // Optimistic update
+    item.is_selected = selected;
+    const card = document.getElementById(`item-${itemId}`);
+    if (card) card.classList.toggle('ct-selected', selected);
+    updateSummary(cartData);
+    syncSelectAllCheckbox(cartData);
+
+    // Persist to server
+    await fetch('/buyer/api/cart/select', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ mode: 'item', item_id: itemId, selected }),
+    }).catch(() => null);
+}
+
+// ── Select All / Deselect All ─────────────────────────────────
+async function toggleSelectAll(selected) {
+    cartData.forEach(i => { i.is_selected = selected; });
+    document.getElementById('ctItems').innerHTML = cartData.map(renderItem).join('');
+    updateSummary(cartData);
+    syncSelectAllCheckbox(cartData);
+
+    await fetch('/buyer/api/cart/select', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ mode: 'all', selected }),
+    }).catch(() => null);
+}
+
+// ── Validate cart quantity input ──────────────────────────────
+function validateCartQtyInput(input, itemId, maxStock) {
+    let val = parseInt(input.value);
+    const errorEl = document.getElementById(`qty-error-${itemId}`);
+    
+    if (isNaN(val) || val < 1) {
+        val = 1;
+        input.value = val;
+        if (errorEl) {
+            errorEl.textContent = 'Quantity must be 1 or more';
+            errorEl.style.display = 'block';
+        }
+        showToast('Quantity must be at least 1', true);
+        // Update quantity after validation
+        setTimeout(() => {
+            const qtyInput = document.querySelector(`#item-${itemId} .ct-qty-val`);
+            if (qtyInput) qtyInput.value = val;
+            const item = cartData.find(i => i.id === itemId);
+            if (item) item.quantity = val;
+            updateSummary(cartData);
+            API.buyer.updateCartItem(itemId, val).catch(() => null);
+            updateCartBadge();
+        }, 100);
+    } else if (val > maxStock) {
+        val = maxStock;
+        input.value = val;
+        if (errorEl) {
+            errorEl.textContent = `Maximum stock: ${maxStock}`;
+            errorEl.style.display = 'block';
+        }
+        showToast(`Maximum stock reached (${maxStock} available)`, true);
+        // Update quantity after validation
+        setTimeout(() => {
+            const qtyInput = document.querySelector(`#item-${itemId} .ct-qty-val`);
+            if (qtyInput) qtyInput.value = val;
+            const item = cartData.find(i => i.id === itemId);
+            if (item) item.quantity = val;
+            updateSummary(cartData);
+            API.buyer.updateCartItem(itemId, val).catch(() => null);
+            updateCartBadge();
+        }, 100);
+    } else {
+        if (errorEl) {
+            errorEl.style.display = 'none';
+        }
+        // Update quantity if changed
+        const item = cartData.find(i => i.id === itemId);
+        if (item && item.quantity !== val) {
+            const qtyInput = document.querySelector(`#item-${itemId} .ct-qty-val`);
+            if (qtyInput) qtyInput.value = val;
+            item.quantity = val;
+            updateSummary(cartData);
+            API.buyer.updateCartItem(itemId, val).catch(() => null);
+            updateCartBadge();
+        }
+    }
+}
+
+// ── Change quantity by delta (reads current value from input) ────
+async function changeQtyByDelta(itemId, delta) {
+    const qtyInput = document.querySelector(`#item-${itemId} .ct-qty-val`);
+    if (!qtyInput) return;
+    
+    const currentQty = parseInt(qtyInput.value) || 1;
+    const newQty = currentQty + delta;
+    
+    // Validate against max stock
+    const item = cartData.find(i => i.id === itemId);
+    if (!item) return;
+    
+    const maxStock = Number(item.available_stock ?? 9999);
+    
+    if (newQty < 1) {
+        newQty = 1;
+        showToast('Quantity must be at least 1', true);
+    } else if (newQty > maxStock) {
+        newQty = maxStock;
+        showToast(`Maximum stock reached (${maxStock} available)`, true);
+    }
+    
+    // Update UI immediately
+    qtyInput.value = newQty;
+    
+    // Update local data
+    item.quantity = newQty;
+    
+    // Update summary
+    updateSummary(cartData);
+    
+    // Send to server
+    const res = await API.buyer.updateCartItem(itemId, newQty).catch(() => ({ success: false, error: 'Network error' }));
+    
+    if (!res.success) {
+        showToast(res.error || 'Failed to update quantity', true);
+        // Reload cart to sync with server
+        loadCartPage();
+    } else {
+        updateCartBadge();
+    }
+}
+
+
+
+// ── Remove item ───────────────────────────────────────────────
+async function removeItem(itemId) {
+    cartData = cartData.filter(i => i.id !== itemId);
+    renderCart(cartData);
+    await API.buyer.removeCartItem(itemId).catch(() => null);
+    updateCartBadge();
+    showToast('Item removed from cart.');
+}
+
+// ── Clear all ─────────────────────────────────────────────────
+async function clearAllItems() {
+    if (!cartData.length) return;
+    const ids = cartData.map(i => i.id);
+    cartData = [];
+    renderCart([]);
+    await Promise.all(ids.map(id => API.buyer.removeCartItem(id).catch(() => null)));
+    updateCartBadge();
+    showToast('Cart cleared.');
+}
+
+// ── Go to checkout (selection already persisted server-side) ──
+function goToCheckout() {
+    const selected = cartData.filter(i => i.is_selected);
+    if (!selected.length) {
+        showToast('Please select at least one item to checkout.', true);
+        return;
+    }
+    window.location.href = '/buyer/checkout';
+}
+
+// ── Load cart ─────────────────────────────────────────────────
+async function loadCartPage() {
+    updateCartBadge();
+    const raw = await API.buyer.getCart().catch(() => null);
+    let items = [];
+    if (Array.isArray(raw))                                   items = raw;
+    else if (raw && Array.isArray(raw.items))                 items = raw.items;
+    else if (raw && raw.data && Array.isArray(raw.data.items)) items = raw.data.items;
+    else if (raw && Array.isArray(raw.data))                  items = raw.data;
+
+    if (!items.length) {
+        document.getElementById('ctLoading').style.display = 'none';
+        document.getElementById('ctEmpty').style.display   = 'block';
+        return;
+    }
+    cartData = items.map(item => ({
+        ...item,
+        image:       imgUrl(item.image),
+        name:        item.product_name || item.name || 'Product',
+        price:       item.price ?? item.price_snapshot ?? 0,
+        is_selected: !!item.is_selected,   // restored from server
+    }));
+    renderCart(cartData);
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+    loadCartPage();
+    document.getElementById('clearAllBtn')?.addEventListener('click', clearAllItems);
+    document.getElementById('selectAllChk')?.addEventListener('change', function() {
+        toggleSelectAll(this.checked);
+    });
+});
+
+// ── Toast notification ────────────────────────────────────────
+function showToast(message, isError = false) {
+    const toast = document.getElementById('shopToast');
+    if (!toast) return;
+    
+    toast.textContent = message;
+    toast.className = 'shop-toast' + (isError ? ' error' : ' success');
+    toast.style.display = 'flex';
+    
+    setTimeout(() => {
+        toast.style.animation = 'toastFadeOut 0.2s ease';
+        setTimeout(() => {
+            toast.style.display = 'none';
+            toast.style.animation = '';
+        }, 200);
+    }, 3000);
+}
+
+// ── Update cart badge ────────────────────────────────────────
+function updateCartBadge() {
+    const totalQty = cartData.reduce((s, i) => s + Number(i.quantity || 0), 0);
+    document.querySelectorAll('.cart-count').forEach(el => {
+        el.textContent = totalQty;
+        el.style.display = totalQty > 0 ? 'flex' : 'none';
+    });
+}
+</script>
+</body>
+</html>

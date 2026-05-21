@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Grande — My Account</title>
+    <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;500;600;700&family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/buyer.css') }}">
+</head>
+<body>
+
+<nav class="navbar">
+    <div class="container">
+        <a href="/" class="navbar-logo">Grande</a>
+        <div class="navbar-actions">
+            <a href="/buyer/orders"  class="navbar-action-btn" title="Orders">📦</a>
+            <a href="/buyer/profile" class="navbar-action-btn" title="Profile">👤 {{ session.user.name.split()[0] }}</a>
+            <a href="/logout"        class="navbar-action-btn" title="Logout" style="color:#FF2BAC">Logout</a>
+        </div>
+    </div>
+</nav>
+
+<section class="buyer-section">
+    <div class="container">
+        <h2 style="font-family:var(--font-display);font-size:var(--font-size-3xl);margin-bottom:24px">
+            Welcome, {{ session.user.name }} 👋
+        </h2>
+        <div class="buyer-grid">
+            <a href="/buyer/orders"    class="buyer-action-card"><div class="buyer-action-icon">📦</div><div class="buyer-action-title">My Orders</div></a>
+            <a href="/buyer/wishlist"  class="buyer-action-card"><div class="buyer-action-icon">❤️</div><div class="buyer-action-title">Wishlist</div></a>
+            <a href="/buyer/profile"   class="buyer-action-card"><div class="buyer-action-icon">👤</div><div class="buyer-action-title">Profile</div></a>
+            <a href="/buyer/addresses" class="buyer-action-card"><div class="buyer-action-icon">📍</div><div class="buyer-action-title">Addresses</div></a>
+        </div>
+    </div>
+</section>
+
+<!-- Admin Support Chat Widget -->
+<div class="admin-support-widget" style="position:fixed;bottom:20px;right:20px;z-index:1000">
+    <button onclick="startAdminChat()" 
+        style="
+            width:56px;height:56px;border-radius:50%;
+            background:linear-gradient(135deg,#FF2BAC,#FF6BCE);
+            border:none;color:#fff;font-size:24px;
+            box-shadow:0 4px 12px rgba(255,43,172,.3);
+            cursor:pointer;transition:transform .2s;
+            display:flex;align-items:center;justify-content:center;
+        " 
+        onmouseover="this.style.transform='scale(1.1)'" 
+        onmouseout="this.style.transform='scale(1)'"
+        title="Chat with Admin Support">
+        💬
+    </button>
+</div>
+
+<script>
+async function startAdminChat() {
+    try {
+        // Fetch admin user ID from API
+        const adminRes = await fetch('/messages/api/admin-user-id').then(r => r.json());
+        if (!adminRes.admin_id) {
+            alert('Admin support is currently unavailable. Please try again later.');
+            return;
+        }
+        
+        const res = await fetch('/messages/api/conversations/start', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRF-Token': document.querySelector('meta[name="csrf-token"]')?.content || ''
+            },
+            body: JSON.stringify({ user_id: adminRes.admin_id })
+        }).then(r => r.json());
+        
+        if (res && res.id) {
+            window.location.href = `/messages/?conv=${res.id}`;
+        } else {
+            alert('Failed to start chat with admin. Please try again.');
+        }
+    } catch (e) {
+        console.error('Failed to start admin chat:', e);
+        alert('Network error. Please try again.');
+    }
+}
+</script>
+
+<script src="{{ url_for('static', filename='js/api.js') }}"></script>
+<script src="{{ url_for('static', filename='js/buyer.js') }}"></script>
+</body>
+</html>

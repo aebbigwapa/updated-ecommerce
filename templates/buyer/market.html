@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="csrf-token" content="{{ csrf_token() }}">
+    <title>Grande — Shop</title>
+    <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;500;600;700&family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/shop.css') }}">
+</head>
+<body>
+
+{% from 'buyer/_navbar.html' import grande_navbar %}
+{{ grande_navbar(user=session.get('user'), active='shop') }}
+
+<!-- ── BREADCRUMB ─────────────────────────────────────────── -->
+<div class="container" style="padding-top:16px;padding-bottom:8px">
+    <div class="shop-breadcrumb">
+        <a href="/">Home</a> / <span id="breadcrumbLabel">Shop</span>
+    </div>
+</div>
+
+<!-- ── MAIN LAYOUT ────────────────────────────────────────── -->
+<div class="container" style="padding-bottom:60px">
+    <div class="market-layout">
+
+        <!-- Sidebar filters -->
+        <aside class="market-sidebar">
+            <div class="filter-card">
+                <div class="filter-title">Categories</div>
+                <div class="filter-option">
+                    <input type="radio" name="cat" value="" id="catAll" checked onchange="applyFilters()">
+                    <label for="catAll">All</label>
+                </div>
+                <div class="filter-option">
+                    <input type="radio" name="cat" value="Dresses & Skirts" id="catDresses" onchange="applyFilters()">
+                    <label for="catDresses">👗 Dresses & Skirts</label>
+                </div>
+                <div class="filter-option">
+                    <input type="radio" name="cat" value="Tops & Blouses" id="catTops" onchange="applyFilters()">
+                    <label for="catTops">👚 Tops & Blouses</label>
+                </div>
+                <div class="filter-option">
+                    <input type="radio" name="cat" value="Activewear & Yoga Pants" id="catActive" onchange="applyFilters()">
+                    <label for="catActive">🏃 Activewear</label>
+                </div>
+                <div class="filter-option">
+                    <input type="radio" name="cat" value="Lingerie & Sleepwear" id="catLingerie" onchange="applyFilters()">
+                    <label for="catLingerie">🌙 Lingerie & Sleepwear</label>
+                </div>
+                <div class="filter-option">
+                    <input type="radio" name="cat" value="Jackets & Coats" id="catJackets" onchange="applyFilters()">
+                    <label for="catJackets">🧥 Jackets & Coats</label>
+                </div>
+                <div class="filter-option">
+                    <input type="radio" name="cat" value="Shoes & Accessories" id="catShoes" onchange="applyFilters()">
+                    <label for="catShoes">👠 Shoes & Accessories</label>
+                </div>
+            </div>
+
+            <div class="filter-card">
+                <div class="filter-title">Price Range</div>
+                <div class="price-range">
+                    <input type="number" class="price-input" id="minPrice" placeholder="Min" onkeydown="if(event.key==='Enter') applyFilters()">
+                    <span style="color:var(--gray)">—</span>
+                    <input type="number" class="price-input" id="maxPrice" placeholder="Max" onkeydown="if(event.key==='Enter') applyFilters()">
+                </div>
+                <button class="btn btn-primary" style="width:100%;margin-top:12px;padding:8px" onclick="applyFilters()">Apply</button>
+            </div>
+        </aside>
+
+        <!-- Product area -->
+        <div class="market-main">
+            <div class="market-toolbar">
+                <div class="section-title" style="margin-bottom:0" id="resultsLabel">All Products</div>
+                <select class="market-sort" id="sortSelect" onchange="applyFilters()">
+                    <option value="">Sort by</option>
+                    <option value="price_asc">Price: Low to High</option>
+                    <option value="price_desc">Price: High to Low</option>
+                    <option value="newest">Newest</option>
+                </select>
+            </div>
+
+            <div class="product-grid" id="productGrid">
+                <div style="grid-column:1/-1;text-align:center;padding:60px 0">
+                    <div class="home-spinner"></div>
+                    <p style="margin-top:12px;font-size:13px;color:#999">Loading products...</p>
+                </div>
+            </div>
+        </div>
+
+    </div>
+</div>
+
+<div class="shop-toast" id="shopToast"></div>
+
+<script src="{{ url_for('static', filename='js/api.js') }}"></script>
+<script src="{{ url_for('static', filename='js/shop.js') }}"></script>
+<script>
+function doSearch() {
+    const q = document.getElementById('searchInput')?.value?.trim();
+    applyFilters({ search: q });
+}
+
+function applyFilters(extra = {}) {
+    const cat      = document.querySelector('input[name="cat"]:checked')?.value || '';
+    const minPrice = document.getElementById('minPrice')?.value || '';
+    const maxPrice = document.getElementById('maxPrice')?.value || '';
+    const sort     = document.getElementById('sortSelect')?.value || '';
+    const search   = document.getElementById('searchInput')?.value?.trim() || '';
+    loadMarket({ category: cat, min_price: minPrice, max_price: maxPrice, sort, search, ...extra });
+    const label = cat || (extra.search ? `"${extra.search || search}"` : 'All Products');
+    document.getElementById('breadcrumbLabel').textContent = label || 'Shop';
+    document.getElementById('resultsLabel').textContent    = cat || 'All Products';
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+    const params = new URLSearchParams(window.location.search);
+    const cat    = params.get('category') || '';
+    const search = params.get('search')   || '';
+    if (cat) {
+        const radio = document.querySelector(`input[name="cat"][value="${cat}"]`);
+        if (radio) radio.checked = true;
+        document.getElementById('breadcrumbLabel').textContent = cat;
+        document.getElementById('resultsLabel').textContent    = cat;
+    }
+    if (search) document.getElementById('searchInput').value = search;
+    loadMarket({ category: cat, search });
+});
+</script>
+</body>
+</html>
