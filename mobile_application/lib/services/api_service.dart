@@ -16,6 +16,7 @@ class ApiService {
   static final String flaskBaseUrl = () {
     const envUrl = String.fromEnvironment('FLASK_BASE_URL');
     if (envUrl.isNotEmpty) return envUrl;
+    // Remove trailing slash to avoid double slashes
     return 'https://ecommerce-backend-o0hl.onrender.com';
   }();
 
