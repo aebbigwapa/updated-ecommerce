@@ -115,17 +115,10 @@ class _GrandeNavbarState extends State<GrandeNavbar> {
       shadowColor: AppTheme.border,
       automaticallyImplyLeading: false,
       titleSpacing: AppTheme.md,
-      title: ShaderMask(
-        shaderCallback: (bounds) => AppTheme.primaryGradient.createShader(bounds),
-        child: const Text(
-          'Grande',
-          style: TextStyle(
-            fontFamily: AppTheme.fontDisplay,
-            fontSize: 24,
-            fontWeight: FontWeight.w700,
-            color: AppTheme.white,
-          ),
-        ),
+      title: Image.asset(
+        'assets/logo.png',
+        height: 40,
+        fit: BoxFit.contain,
       ),
       actions: [
         // Notifications

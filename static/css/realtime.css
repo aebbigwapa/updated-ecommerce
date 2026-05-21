@@ -1,0 +1,57 @@
+/* Real-time Toast Notifications */
+.realtime-toast {
+    position: fixed;
+    top: 80px;
+    right: 20px;
+    background: white;
+    border-radius: 12px;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.15);
+    padding: 16px;
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+    min-width: 320px;
+    max-width: 400px;
+    z-index: 10000;
+    transform: translateX(450px);
+    opacity: 0;
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    border-left: 4px solid #FF2BAC;
+}
+
+.realtime-toast.show {
+    transform: translateX(0);
+    opacity: 1;
+}
+
+.realtime-toast .toast-icon {
+    font-size: 24px;
+    flex-shrink: 0;
+}
+
+.realtime-toast .toast-content {
+    flex: 1;
+    min-width: 0;
+}
+
+.realtime-toast .toast-title {
+    font-size: 14px;
+    font-weight: 600;
+    color: #1a1a3e;
+    margin-bottom: 4px;
+}
+
+.realtime-toast .toast-message {
+    font-size: 13px;
+    color: #6c757d;
+    line-height: 1.4;
+}
+
+@media (max-width: 640px) {
+    .realtime-toast {
+        right: 10px;
+        left: 10px;
+        min-width: auto;
+        max-width: none;
+    }
+}
