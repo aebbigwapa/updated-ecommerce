@@ -33,8 +33,14 @@ class _CartScreenState extends State<CartScreen> {
     final user = await ApiService.getCurrentUser();
     final userId = user?['id'] as String?;
     RealtimeService.instance.subscribeCart(userId: userId);
+    // Also subscribe to products for real-time stock updates
+    RealtimeService.instance.subscribeProducts();
     _cartSub = RealtimeService.instance.cartStream.listen((_) {
       if (mounted) _syncCart(); // silent sync, no spinner
+    });
+    // Listen to product updates for stock changes
+    RealtimeService.instance.productsStream.listen((_) {
+      if (mounted) _syncCart(); // refresh cart when products update
     });
   }
 
@@ -42,6 +48,7 @@ class _CartScreenState extends State<CartScreen> {
   void dispose() {
     _cartSub?.cancel();
     RealtimeService.instance.unsubscribeCart();
+    RealtimeService.instance.unsubscribeProducts();
     super.dispose();
   }
 
@@ -104,14 +111,21 @@ class _CartScreenState extends State<CartScreen> {
     final idx = _cartItems.indexWhere((i) => i['id'] == itemId);
     if (idx == -1) return;
     final maxStock = ((_cartItems[idx]['available_stock'] ?? 9999) as num).toInt();
+    
+    // Check if quantity exceeds stock
     if (quantity > maxStock) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Only $maxStock in stock'), backgroundColor: Colors.orange),
+          SnackBar(
+            content: Text('Only $maxStock available in stock'),
+            backgroundColor: Colors.orange,
+            duration: const Duration(seconds: 2),
+          ),
         );
       }
       return;
     }
+    
     // Optimistic update
     setState(() {
       _cartItems[idx]['quantity'] = quantity;
@@ -154,6 +168,25 @@ class _CartScreenState extends State<CartScreen> {
       );
       return;
     }
+    
+    // Validate stock before checkout
+    for (final item in _cartItems) {
+      final quantity = (item['quantity'] as num? ?? 1).toInt();
+      final maxStock = (item['available_stock'] as num? ?? 9999).toInt();
+      final productName = item['product_name'] as String? ?? 'Product';
+      
+      if (quantity > maxStock) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('$productName: Only $maxStock available. Please update your cart.'),
+            backgroundColor: Colors.red,
+            duration: const Duration(seconds: 3),
+          ),
+        );
+        return;
+      }
+    }
+    
     Navigator.push(
       context,
       MaterialPageRoute(
@@ -350,11 +383,22 @@ class _CartScreenState extends State<CartScreen> {
                   style: const TextStyle(fontSize: 12, color: AppTheme.textLight)),
             ],
             const SizedBox(height: 4),
-            Text('₱${price.toStringAsFixed(2)}',
-                style: const TextStyle(fontSize: 13, color: AppTheme.textLight)),
+            Row(
+              children: [
+                Text('₱${price.toStringAsFixed(2)}',
+                    style: const TextStyle(fontSize: 13, color: AppTheme.textLight)),
+                const SizedBox(width: 8),
+                Text('Stock: $maxStock',
+                    style: TextStyle(
+                      fontSize: 11,
+                      color: maxStock < 10 ? Colors.red : AppTheme.textLight,
+                      fontWeight: maxStock < 10 ? FontWeight.w600 : FontWeight.normal,
+                    )),
+              ],
+            ),
             if (atMax)
-              Text('Max stock reached ($maxStock)',
-                  style: const TextStyle(fontSize: 11, color: Colors.red)),
+              const Text('Max stock reached',
+                  style: TextStyle(fontSize: 11, color: Colors.red, fontWeight: FontWeight.w600)),
           ]),
         ),
         // Qty + subtotal + delete

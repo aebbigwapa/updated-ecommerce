@@ -206,7 +206,7 @@
 
       <div class="gn-icon" title="Notifications" style="position:relative" id="gnNotifIcon">
         🔔
-        <span class="gn-notif-dot" id="gnNotifDot"></span>
+        <span class="gn-notif-dot notification-badge" id="gnNotifDot"></span>
         <div class="gn-notif-dropdown" id="gnNotifDropdown">
           <div class="gn-notif-header">
             <span>Notifications</span>
@@ -258,6 +258,13 @@
 
   </div>
 </nav>
+
+<!-- Real-time updates -->
+{% if user %}
+<meta name="user-id" content="{{ user.id }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/realtime.css') }}">
+<script type="module" src="{{ url_for('static', filename='js/realtime.js') }}"></script>
+{% endif %}
 
 <script type="application/json" id="gnConfig">{"hasUser": {{ 'true' if user else 'false' }}}</script>
 <script>

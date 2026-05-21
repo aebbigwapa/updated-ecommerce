@@ -30,21 +30,12 @@ def _send_via_resend(to_email: str, subject: str, html_body: str, api_key: str) 
     """Send email via Resend API (easiest option)."""
     try:
         import requests
-        sender = os.getenv('EMAIL_ADDRESS', 'onboarding@resend.dev')
         
-        # Resend requires domain verification for production emails
-        # For testing, use delivered@resend.dev which always works
-        # In production, verify your domain at https://resend.com/domains
-        if to_email.endswith('@gmail.com') or to_email.endswith('@yahoo.com') or to_email.endswith('@hotmail.com'):
-            print(f'[EmailService] WARNING: {to_email} requires domain verification. Using test email.')
-            print(f'[EmailService] To fix: Verify your domain at https://resend.com/domains')
-            # For now, send to test email that always works
-            actual_recipient = to_email
-            to_email = 'delivered@resend.dev'
-            html_body = f'<p><strong>Original recipient: {actual_recipient}</strong></p>' + html_body
+        # Use verified domain or default to onboarding@resend.dev for testing
+        verified_domain = os.getenv('RESEND_FROM_EMAIL', 'onboarding@resend.dev')
         
         payload = {
-            "from": f"Grande Marketplace <{sender}>",
+            "from": f"Grande Marketplace <{verified_domain}>",
             "to": [to_email],
             "subject": subject,
             "html": html_body
@@ -64,7 +55,9 @@ def _send_via_resend(to_email: str, subject: str, html_body: str, api_key: str) 
         )
         
         if response.status_code in (200, 201):
-            print(f'[EmailService] SUCCESS: sent to {to_email}')
+            result = response.json()
+            email_id = result.get('id', 'unknown')
+            print(f'[EmailService] SUCCESS: sent to {to_email} (ID: {email_id})')
             return True
         else:
             print(f'[EmailService] Resend Error: {response.status_code} - {response.text}')
@@ -166,11 +159,16 @@ def send_order_confirmation(to_email: str, buyer_name: str, order: dict, items: 
     order_id      = (order.get('id') or '')[:8].upper()
     total         = float(order.get('total_amount', 0))
     payment       = (order.get('payment_method') or 'cod').replace('_', ' ').title()
-    address       = order.get('shipping_address') or {}
-    address_str   = ', '.join(filter(None, [
-        address.get('street'), address.get('barangay'),
-        address.get('city'),   address.get('region')
-    ]))
+    address       = order.get('shipping_address') or order.get('address') or ''
+    
+    # Handle address as string or dict
+    if isinstance(address, dict):
+        address_str = ', '.join(filter(None, [
+            address.get('street'), address.get('barangay'),
+            address.get('city'),   address.get('region')
+        ]))
+    else:
+        address_str = str(address) if address else 'See account'
 
     rows = ''
     for item in items:
@@ -261,6 +259,102 @@ def send_order_confirmation(to_email: str, buyer_name: str, order: dict, items: 
     return _send(to_email, f'Order Confirmed #{order_id} — Grande', html)
 
 
+def send_order_status_update(to_email: str, buyer_name: str, order_id: str, status: str) -> bool:
+    """Send order status update email to buyer."""
+    status_messages = {
+        'pending': {'title': 'Order Received', 'message': 'Your order is pending seller confirmation', 'icon': '⏳'},
+        'processing': {'title': 'Order Accepted', 'message': 'The seller is preparing your order', 'icon': '📦'},
+        'ready_for_pickup': {'title': 'Ready for Pickup', 'message': 'Your order is ready and waiting for our rider', 'icon': '✅'},
+        'in_transit': {'title': 'Out for Delivery', 'message': 'Your order is on the way!', 'icon': '🚚'},
+        'delivered': {'title': 'Order Delivered', 'message': 'Your order has been successfully delivered', 'icon': '🎉'},
+        'cancelled': {'title': 'Order Cancelled', 'message': 'Your order has been cancelled', 'icon': '❌'},
+    }
+    
+    status_info = status_messages.get(status, status_messages['pending'])
+    short_id = order_id[:8].upper() if len(order_id) >= 8 else order_id.upper()
+    
+    html = f'''
+    <!DOCTYPE html>
+    <html>
+    <body style="margin:0;padding:0;background:#f4f4f8;font-family:Inter,Arial,sans-serif">
+    <div style="max-width:600px;margin:32px auto;background:#fff;border-radius:16px;overflow:hidden;box-shadow:0 4px 24px rgba(0,0,0,.08)">
+      <div style="background:linear-gradient(135deg,#FF2BAC,#FF6BCE);padding:32px 40px;text-align:center">
+        <h1 style="color:#fff;margin:0;font-size:28px;font-weight:700">Grande</h1>
+        <p style="color:rgba(255,255,255,.85);margin:6px 0 0;font-size:14px">Order Status Update</p>
+      </div>
+      <div style="padding:32px 40px;text-align:center">
+        <div style="font-size:64px;margin-bottom:20px">{status_info['icon']}</div>
+        <h2 style="color:#FF2BAC;margin:0 0 10px;font-size:24px">{status_info['title']}</h2>
+        <p style="font-size:16px;color:#6c757d;margin:0 0 20px">{status_info['message']}</p>
+        <p style="font-size:14px;color:#adb5bd">Order #{short_id}</p>
+      </div>
+      <div style="background:#f8f9fa;padding:20px 40px;text-align:center;border-top:1px solid #f0f0f0">
+        <p style="font-size:12px;color:#adb5bd;margin:0">
+          &copy; 2026 Grande Marketplace &mdash; This is an automated email, please do not reply.
+        </p>
+      </div>
+    </div>
+    </body>
+    </html>'''
+    
+    return _send(to_email, f'{status_info["icon"]} {status_info["title"]} - Order #{short_id}', html)
+
+
+def send_seller_new_order(to_email: str, seller_name: str, order_id: str, customer_name: str, total: float, payment_method: str) -> bool:
+    """Send new order notification to seller."""
+    short_id = order_id[:8].upper() if len(order_id) >= 8 else order_id.upper()
+    payment = payment_method.replace('_', ' ').title()
+    
+    html = f'''
+    <!DOCTYPE html>
+    <html>
+    <body style="margin:0;padding:0;background:#f4f4f8;font-family:Inter,Arial,sans-serif">
+    <div style="max-width:600px;margin:32px auto;background:#fff;border-radius:16px;overflow:hidden;box-shadow:0 4px 24px rgba(0,0,0,.08)">
+      <div style="background:linear-gradient(135deg,#FF2BAC,#FF6BCE);padding:32px 40px;text-align:center">
+        <h1 style="color:#fff;margin:0;font-size:28px;font-weight:700">🛍️ New Order!</h1>
+        <p style="color:rgba(255,255,255,.85);margin:6px 0 0;font-size:14px">You have received a new order</p>
+      </div>
+      <div style="padding:32px 40px">
+        <p style="font-size:16px;color:#1a1a3e;margin:0 0 8px">Hi <strong>{seller_name}</strong>,</p>
+        <p style="font-size:14px;color:#6c757d;margin:0 0 24px">Great news! You have received a new order. Please review and accept it as soon as possible.</p>
+        
+        <div style="background:#f8f9fa;border-radius:10px;padding:16px 20px;margin-bottom:24px;border-left:4px solid #FF2BAC">
+          <table style="width:100%;border-collapse:collapse">
+            <tr>
+              <td style="font-size:13px;color:#6c757d;padding:4px 0">Order ID</td>
+              <td style="font-size:13px;font-weight:600;color:#1a1a3e;text-align:right">#{short_id}</td>
+            </tr>
+            <tr>
+              <td style="font-size:13px;color:#6c757d;padding:4px 0">Customer</td>
+              <td style="font-size:13px;font-weight:600;color:#1a1a3e;text-align:right">{customer_name}</td>
+            </tr>
+            <tr>
+              <td style="font-size:13px;color:#6c757d;padding:4px 0">Total Amount</td>
+              <td style="font-size:13px;font-weight:600;color:#FF2BAC;text-align:right">&#8369;{total:,.2f}</td>
+            </tr>
+            <tr>
+              <td style="font-size:13px;color:#6c757d;padding:4px 0">Payment</td>
+              <td style="font-size:13px;font-weight:600;color:#1a1a3e;text-align:right">{payment}</td>
+            </tr>
+          </table>
+        </div>
+        
+        <div style="background:#fff3cd;padding:15px;border-radius:8px;border-left:4px solid #ffc107">
+          <p style="margin:0;font-size:13px;color:#856404">⚡ <strong>Action Required:</strong> Please login to your seller dashboard to accept and process this order.</p>
+        </div>
+      </div>
+      <div style="background:#f8f9fa;padding:20px 40px;text-align:center;border-top:1px solid #f0f0f0">
+        <p style="font-size:12px;color:#adb5bd;margin:0">
+          &copy; 2026 Grande Marketplace &mdash; This is an automated email, please do not reply.
+        </p>
+      </div>
+    </div>
+    </body>
+    </html>'''
+    
+    return _send(to_email, f'🛍️ New Order Received #{short_id}', html)
+
+
 def send_password_reset(to_email: str, name: str, reset_url: str) -> bool:
     """Send password reset link email."""
     html = f'''
@@ -348,3 +442,85 @@ def send_otp_email(to_email: str, name: str, otp: str) -> bool:
     </html>'''
 
     return _send(to_email, 'Your Verification Code — Grande', html)
+
+
+def send_cart_abandonment(to_email: str, name: str, cart_items: list) -> bool:
+    """Send cart abandonment reminder email."""
+    items_html = ''
+    for item in cart_items[:3]:  # Show max 3 items
+        product_name = item.get('name', 'Product')
+        price = float(item.get('price', 0))
+        items_html += f'''
+        <div style="padding:12px 0;border-bottom:1px solid #f0f0f0">
+          <p style="margin:0;font-size:14px;color:#1a1a3e;font-weight:600">{product_name}</p>
+          <p style="margin:4px 0 0;font-size:13px;color:#FF2BAC;font-weight:600">&#8369;{price:,.2f}</p>
+        </div>'''
+    
+    html = f'''
+    <!DOCTYPE html>
+    <html>
+    <body style="margin:0;padding:0;background:#f4f4f8;font-family:Inter,Arial,sans-serif">
+    <div style="max-width:520px;margin:32px auto;background:#fff;border-radius:16px;overflow:hidden;box-shadow:0 4px 24px rgba(0,0,0,.08)">
+      <div style="background:linear-gradient(135deg,#FF2BAC,#FF6BCE);padding:32px 40px;text-align:center">
+        <h1 style="color:#fff;margin:0;font-size:28px;font-weight:700">🛒 Your Cart is Waiting!</h1>
+      </div>
+      <div style="padding:32px 40px">
+        <p style="font-size:16px;color:#1a1a3e;margin:0 0 8px">Hi <strong>{name}</strong>,</p>
+        <p style="font-size:14px;color:#6c757d;margin:0 0 24px">
+          You left some items in your cart. Complete your purchase before they're gone!
+        </p>
+        {items_html}
+        <div style="text-align:center;margin-top:28px">
+          <a href="#" style="display:inline-block;background:linear-gradient(135deg,#FF2BAC,#FF6BCE);color:#fff;text-decoration:none;padding:14px 36px;border-radius:10px;font-size:15px;font-weight:700">Complete Purchase</a>
+        </div>
+      </div>
+      <div style="background:#f8f9fa;padding:20px 40px;text-align:center;border-top:1px solid #f0f0f0">
+        <p style="font-size:12px;color:#adb5bd;margin:0">&copy; 2026 Grande Marketplace</p>
+      </div>
+    </div>
+    </body>
+    </html>'''
+    
+    return _send(to_email, '🛒 Complete Your Purchase — Grande', html)
+
+
+def send_welcome_email(to_email: str, name: str, user_type: str = 'buyer') -> bool:
+    """Send welcome email to new users."""
+    role_messages = {
+        'buyer': {'title': 'Welcome to Grande!', 'message': 'Start shopping from local sellers in your area.'},
+        'seller': {'title': 'Welcome, Seller!', 'message': 'Start listing your products and reach thousands of buyers.'},
+        'rider': {'title': 'Welcome, Rider!', 'message': 'Start accepting delivery requests and earn money.'},
+    }
+    
+    role_info = role_messages.get(user_type, role_messages['buyer'])
+    
+    html = f'''
+    <!DOCTYPE html>
+    <html>
+    <body style="margin:0;padding:0;background:#f4f4f8;font-family:Inter,Arial,sans-serif">
+    <div style="max-width:520px;margin:32px auto;background:#fff;border-radius:16px;overflow:hidden;box-shadow:0 4px 24px rgba(0,0,0,.08)">
+      <div style="background:linear-gradient(135deg,#FF2BAC,#FF6BCE);padding:32px 40px;text-align:center">
+        <h1 style="color:#fff;margin:0;font-size:28px;font-weight:700">🎉 {role_info['title']}</h1>
+      </div>
+      <div style="padding:32px 40px">
+        <p style="font-size:16px;color:#1a1a3e;margin:0 0 8px">Hi <strong>{name}</strong>,</p>
+        <p style="font-size:14px;color:#6c757d;margin:0 0 24px">
+          Welcome to Grande Marketplace! {role_info['message']}
+        </p>
+        <div style="background:#f8f9fa;border-radius:10px;padding:20px;margin-bottom:24px">
+          <p style="margin:0;font-size:13px;color:#6c757d">✅ Account verified</p>
+          <p style="margin:8px 0 0;font-size:13px;color:#6c757d">✅ Profile created</p>
+          <p style="margin:8px 0 0;font-size:13px;color:#6c757d">✅ Ready to go!</p>
+        </div>
+        <div style="text-align:center">
+          <a href="#" style="display:inline-block;background:linear-gradient(135deg,#FF2BAC,#FF6BCE);color:#fff;text-decoration:none;padding:14px 36px;border-radius:10px;font-size:15px;font-weight:700">Get Started</a>
+        </div>
+      </div>
+      <div style="background:#f8f9fa;padding:20px 40px;text-align:center;border-top:1px solid #f0f0f0">
+        <p style="font-size:12px;color:#adb5bd;margin:0">&copy; 2026 Grande Marketplace</p>
+      </div>
+    </div>
+    </body>
+    </html>'''
+    
+    return _send(to_email, f'🎉 {role_info["title"]} — Grande', html)

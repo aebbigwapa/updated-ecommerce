@@ -76,6 +76,24 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
       return;
     }
 
+    // Validate stock before placing order
+    for (final item in widget.cartItems) {
+      final quantity = (item['quantity'] as num? ?? 1).toInt();
+      final maxStock = (item['available_stock'] as num? ?? 9999).toInt();
+      final productName = item['product_name'] as String? ?? 'Product';
+      
+      if (quantity > maxStock) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('$productName: Only $maxStock available. Please update your cart.'),
+            backgroundColor: Colors.red,
+            duration: const Duration(seconds: 3),
+          ),
+        );
+        return;
+      }
+    }
+
     setState(() => _isPlacingOrder = true);
     try {
       // Build address string from selected address

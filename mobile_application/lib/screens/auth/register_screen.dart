@@ -44,12 +44,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
   String? _selectedRole;
   String? _selectedStoreCategory;
 
-  // OTP state
-  bool _otpSent = false;
-  bool _otpVerified = false;
-  String _otpTimerText = '';
-  int _otpSecondsRemaining = 0;
-  Timer? _otpTimer;
+
 
   // Document files
   File? _buyerValidIdFile;
@@ -176,51 +171,6 @@ class _RegisterScreenState extends State<RegisterScreen> {
 
   // ── Map & Geolocation ───────────────────────────────────────────────────────
 
-  Future<void> _getCurrentLocation() async {
-    try {
-      final loc.Location location = loc.Location();
-      bool serviceEnabled = await location.serviceEnabled();
-      if (!serviceEnabled) {
-        serviceEnabled = await location.requestService();
-        if (!serviceEnabled) return;
-      }
-
-      final permissionStatus = await location.hasPermission();
-      if (permissionStatus == loc.PermissionStatus.denied) {
-        final result = await location.requestPermission();
-        if (result != loc.PermissionStatus.granted) return;
-      }
-
-      final loc.LocationData currentLocation = await location.getLocation();
-      final latLng = LatLng(currentLocation.latitude!, currentLocation.longitude!);
-
-      setState(() {
-        _locationMarker = Marker(
-          point: latLng,
-          width: 40,
-          height: 40,
-          child: const Icon(Icons.location_on, color: Colors.red, size: 40),
-        );
-      });
-
-      _mapController.move(latLng, 16);
-
-      // Reverse geocode to fill address fields
-      final address = await PSGService.reverseGeocode(latLng.latitude, latLng.longitude);
-      if (address.isNotEmpty) {
-        setState(() {
-          _streetController.text = '${address['house_number'] ?? ''} ${address['road'] ?? ''}'.trim();
-          _zipCodeController.text = address['postcode'] ?? '';
-          _latitudeController.text = latLng.latitude.toStringAsFixed(8);
-          _longitudeController.text = latLng.longitude.toStringAsFixed(8);
-        });
-        _showSnackBar('Location set. Please verify and adjust if needed.');
-      }
-    } catch (e) {
-      _showSnackBar('Could not get location: $e', isError: true);
-    }
-  }
-
   void _onMapTap(TapPosition tapPosition, LatLng point) {
     setState(() {
       _locationMarker = Marker(
@@ -244,63 +194,10 @@ class _RegisterScreenState extends State<RegisterScreen> {
     });
   }
 
-  // ── OTP Methods ────────────────────────────────────────────────────────────
 
-  Future<void> _sendOtp() async {
-    final email = _emailController.text.trim();
-    if (email.isEmpty || !RegExp(r'^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}$').hasMatch(email)) {
-      _showSnackBar('Please enter a valid email first', isError: true);
-      return;
-    }
-
-    setState(() => _isLoading = true);
-
-    try {
-      final result = await ApiService.sendOtpFlask(email);
-      if (result['success'] == true) {
-        _otpSent = true;
-        _startOtpTimer();
-        _showSnackBar('OTP sent to your email');
-      } else {
-        _showSnackBar(result['message'] ?? 'Failed to send OTP', isError: true);
-      }
-    } catch (e) {
-      _showSnackBar('Network error: $e', isError: true);
-    } finally {
-      if (mounted) setState(() => _isLoading = false);
-    }
-  }
-
-  void _startOtpTimer() {
-    _otpSecondsRemaining = 60;
-    _updateOtpTimerText();
-    _otpTimer?.cancel();
-    _otpTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
-      if (!mounted) {
-        timer.cancel();
-        return;
-      }
-      setState(() {
-        _otpSecondsRemaining--;
-        _updateOtpTimerText();
-        if (_otpSecondsRemaining <= 0) {
-          timer.cancel();
-        }
-      });
-    });
-  }
-
-  void _updateOtpTimerText() {
-    if (_otpSecondsRemaining > 0) {
-      _otpTimerText = 'Resend in $_otpSecondsRemaining s';
-    } else {
-      _otpTimerText = '';
-    }
-  }
 
   @override
   void dispose() {
-    _otpTimer?.cancel();
     _scrollController.dispose();
     _firstNameController.dispose();
     _middleNameController.dispose();
@@ -320,30 +217,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
     super.dispose();
   }
 
-  Future<bool> _verifyOtp(String otp) async {
-    final email = _emailController.text.trim();
-    if (email.isEmpty || otp.isEmpty) return false;
 
-    setState(() => _isLoading = true);
-
-    try {
-      final result = await ApiService.verifyOtpFlask(email, otp);
-      if (result['success'] == true) {
-        _otpVerified = true;
-        _otpTimer?.cancel();
-        _otpTimerText = 'Verified';
-        return true;
-      } else {
-        _showSnackBar(result['message'] ?? 'Invalid OTP', isError: true);
-        return false;
-      }
-    } catch (e) {
-      _showSnackBar('Network error: $e', isError: true);
-      return false;
-    } finally {
-      if (mounted) setState(() => _isLoading = false);
-    }
-  }
 
   // ── Image Picker ────────────────────────────────────────────────────────────
 
@@ -395,11 +269,6 @@ class _RegisterScreenState extends State<RegisterScreen> {
     final email = _emailController.text.trim();
     if (email.isEmpty || !RegExp(r'^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}$').hasMatch(email)) {
       _showSnackBar('Please enter a valid email', isError: true);
-      return false;
-    }
-
-    if (!_otpVerified) {
-      _showSnackBar('Please verify your email with OTP', isError: true);
       return false;
     }
 
@@ -501,7 +370,6 @@ class _RegisterScreenState extends State<RegisterScreen> {
         'password': _passwordController.text,
         'gender': _selectedGender!,
         'role': _selectedRole!,
-        'otp_verified': 'true',
       };
 
       // Optional middle name
@@ -876,51 +744,22 @@ class _RegisterScreenState extends State<RegisterScreen> {
         const SizedBox(height: AppTheme.md),
         _buildTextField(_lastNameController, 'Last Name', validator: _requiredValidator),
 
-        // Email + OTP
+        // Email
         const SizedBox(height: AppTheme.md),
-        _buildEmailField(),
-
-        // OTP field (shown after OTP sent)
-        if (_otpSent) ...[
-          const SizedBox(height: AppTheme.sm),
-          Row(
-            children: [
-              Expanded(
-                child: TextFormField(
-                  decoration: InputDecoration(
-                    labelText: 'Enter OTP',
-                    border: const OutlineInputBorder(),
-                    suffixIcon: _otpVerified
-                        ? const Icon(Icons.check_circle, color: Colors.green)
-                        : null,
-                  ),
-                  maxLength: 6,
-                  keyboardType: TextInputType.number,
-                  enabled: !_otpVerified,
-                  validator: (value) {
-                    if (!_otpVerified && (value == null || value.length != 6)) {
-                      return 'Enter 6-digit OTP';
-                    }
-                    return null;
-                  },
-                  onChanged: (value) async {
-                    if (value.length == 6) {
-                      final verified = await _verifyOtp(value);
-                      if (verified && mounted) {
-                        setState(() => _otpVerified = true);
-                      }
-                    }
-                  },
-                ),
-              ),
-              const SizedBox(width: AppTheme.sm),
-              TextButton(
-                onPressed: _otpVerified || _otpSecondsRemaining > 0 ? null : _sendOtp,
-                child: Text(_otpTimerText.isEmpty ? 'Resend OTP' : _otpTimerText),
-              ),
-            ],
-          ),
-        ],
+        _buildTextField(
+          _emailController,
+          'Email',
+          keyboardType: TextInputType.emailAddress,
+          validator: (value) {
+            if (value == null || value.isEmpty) {
+              return 'Please enter your email';
+            }
+            if (!RegExp(r'^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}$').hasMatch(value)) {
+              return 'Please enter a valid email';
+            }
+            return null;
+          },
+        ),
 
         // Phone
         const SizedBox(height: AppTheme.md),
@@ -954,51 +793,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
     );
   }
 
-  Widget _buildEmailField() {
-    return Row(
-      children: [
-        Expanded(
-          child: TextFormField(
-            controller: _emailController,
-            decoration: const InputDecoration(
-              labelText: 'Email',
-              border: OutlineInputBorder(),
-            ),
-            keyboardType: TextInputType.emailAddress,
-            validator: (value) {
-              if (value == null || value.isEmpty) {
-                return 'Please enter your email';
-              }
-              if (!RegExp(r'^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}$').hasMatch(value)) {
-                return 'Please enter a valid email';
-              }
-              return null;
-            },
-          ),
-        ),
-        const SizedBox(width: AppTheme.sm),
-        ElevatedButton(
-          onPressed: _otpVerified ? null : _sendOtp,
-          style: ElevatedButton.styleFrom(
-            backgroundColor: _otpVerified ? Colors.green : AppTheme.primaryLight,
-          ),
-          child: _isLoading
-              ? const SizedBox(
-                  height: 20,
-                  width: 20,
-                  child: CircularProgressIndicator(
-                    strokeWidth: 2,
-                    valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
-                  ),
-                )
-              : Text(
-                  _otpVerified ? 'Verified ✓' : 'Send OTP',
-                  style: const TextStyle(fontSize: 12),
-                ),
-        ),
-      ],
-    );
-  }
+
 
   Widget _buildGenderRadio() {
     return Column(
@@ -1464,69 +1259,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
           ],
         ),
 
-        const SizedBox(height: AppTheme.lg),
-        const Text(
-          'Pin Your Exact Location',
-          style: TextStyle(fontWeight: FontWeight.w600),
-        ),
-        const SizedBox(height: 8),
-        _buildLocationPinButton(),
-        const SizedBox(height: AppTheme.sm),
 
-        // Map
-        Container(
-          height: 250,
-          decoration: BoxDecoration(
-            border: Border.all(color: Colors.grey[300]!),
-            borderRadius: BorderRadius.circular(8),
-          ),
-          child: ClipRRect(
-            borderRadius: BorderRadius.circular(8),
-            child: FlutterMap(
-              mapController: _mapController,
-              options: MapOptions(
-                initialCenter: const LatLng(12.8797, 121.7740),
-                initialZoom: 6,
-                onTap: _onMapTap,
-                interactionOptions: const InteractionOptions(
-                  flags: InteractiveFlag.all,
-                ),
-              ),
-              children: [
-                TileLayer(
-                  urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
-                  userAgentPackageName: 'com.grande.marketplace',
-                  additionalOptions: const {
-                    'attribution': '© OpenStreetMap contributors',
-                  },
-                ),
-                if (_locationMarker != null) MarkerLayer(markers: [_locationMarker!]),
-              ],
-            ),
-          ),
-        ),
-        const SizedBox(height: AppTheme.sm),
-        Row(
-          children: [
-            Expanded(
-              child: _buildTextField(
-                _latitudeController,
-                'Latitude',
-                required: false,
-                keyboardType: const TextInputType.numberWithOptions(decimal: true),
-              ),
-            ),
-            const SizedBox(width: AppTheme.sm),
-            Expanded(
-              child: _buildTextField(
-                _longitudeController,
-                'Longitude',
-                required: false,
-                keyboardType: const TextInputType.numberWithOptions(decimal: true),
-              ),
-            ),
-          ],
-        ),
         if (_locationLoading)
           const Padding(
             padding: EdgeInsets.symmetric(vertical: 8),
@@ -1536,17 +1269,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
     );
   }
 
-  Widget _buildLocationPinButton() {
-    return ElevatedButton.icon(
-      onPressed: _getCurrentLocation,
-      icon: const Icon(Icons.location_on),
-      label: const Text('Use My Current Location'),
-      style: ElevatedButton.styleFrom(
-        backgroundColor: AppTheme.primaryLight,
-        foregroundColor: Colors.white,
-      ),
-    );
-  }
+
 
   Widget _buildPSGCDropdown({
     required String label,

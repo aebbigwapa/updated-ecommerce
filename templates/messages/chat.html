@@ -254,6 +254,7 @@ let activeConvId = null;
 let allConversations = [];
 let pollTimer = null;
 let lastMsgId = null;
+let realtimeChannel = null;
 
 // ── Init ──────────────────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', () => {
@@ -262,6 +263,13 @@ document.addEventListener('DOMContentLoaded', () => {
     const params = new URLSearchParams(location.search);
     if (params.get('conv')) openConversation(params.get('conv'));
     if (params.get('user')) startChatWithUser(params.get('user'), params.get('order'));
+    
+    // Initialize real-time for conversation list updates
+    if (ME && window.RealtimeService) {
+        window.RealtimeService.onMessages(() => {
+            loadConversations();
+        });
+    }
 });
 
 // ── Conversations ─────────────────────────────────────────────
@@ -374,8 +382,22 @@ async function openConversation(convId) {
     // Load messages
     await loadMessages(convId);
 
-    // Start polling every 3 seconds
-    pollTimer = setInterval(() => pollMessages(convId), 3000);
+    // Subscribe to real-time messages for this conversation
+    if (window.RealtimeService) {
+        if (realtimeChannel) {
+            window.RealtimeService.unsubscribeMessages(activeConvId);
+        }
+        realtimeChannel = window.RealtimeService.subscribeMessages(convId);
+        window.RealtimeService.onMessages((message) => {
+            if (message.conversation_id === convId && message.sender_id !== ME.id) {
+                appendMessages([message]);
+                scrollToBottom();
+            }
+        });
+    } else {
+        // Fallback to polling if realtime not available
+        pollTimer = setInterval(() => pollMessages(convId), 3000);
+    }
 
     // Update URL
     history.replaceState(null, '', `/messages/?conv=${convId}`);
@@ -508,6 +530,10 @@ async function startChatWithUser(userId, orderId) {
 function showSidebar() {
     document.getElementById('convSidebar').classList.remove('hidden');
     clearInterval(pollTimer);
+    if (realtimeChannel && window.RealtimeService) {
+        window.RealtimeService.unsubscribeMessages(activeConvId);
+        realtimeChannel = null;
+    }
     activeConvId = null;
 }
 

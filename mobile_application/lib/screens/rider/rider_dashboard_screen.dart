@@ -8,6 +8,8 @@ import 'package:geolocator/geolocator.dart';
 import 'package:http/http.dart' as http;
 import 'package:image_picker/image_picker.dart';
 import 'package:latlong2/latlong.dart';
+import 'package:path_provider/path_provider.dart';
+import 'package:share_plus/share_plus.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../../theme/app_theme.dart';
 import '../../services/api_service.dart';
@@ -1640,6 +1642,7 @@ class _EarningsTab extends StatefulWidget {
 class _EarningsTabState extends State<_EarningsTab> {
   Map<String, dynamic> _data = {};
   bool _loading = true;
+  bool _isExporting = false;
 
   @override
   void initState() {
@@ -1689,7 +1692,42 @@ class _EarningsTabState extends State<_EarningsTab> {
         .fold<double>(0.0, (sum, h) => sum + (double.tryParse(h['order_total']?.toString() ?? '0') ?? 0.0));
 
     return SafeArea(
-      child: _loading
+      child: Column(
+        children: [
+          // Header with Export button
+          Container(
+            color: Colors.white,
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+            child: Row(
+              children: [
+                const Text('Earnings', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700, color: AppTheme.textDark)),
+                const Spacer(),
+                ElevatedButton.icon(
+                  onPressed: _isExporting ? null : _exportEarnings,
+                  icon: _isExporting
+                      ? const SizedBox(
+                          width: 16,
+                          height: 16,
+                          child: CircularProgressIndicator(
+                            color: Colors.white,
+                            strokeWidth: 2,
+                          ),
+                        )
+                      : const Icon(Icons.download, size: 16),
+                  label: Text(_isExporting ? 'Exporting...' : 'Export', style: const TextStyle(fontSize: 12)),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppTheme.primaryLight,
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const Divider(height: 1),
+          Expanded(
+            child: _loading
           ? const Center(child: CircularProgressIndicator(color: AppTheme.primaryLight))
           : RefreshIndicator(
               onRefresh: _load,
@@ -1841,7 +1879,77 @@ class _EarningsTabState extends State<_EarningsTab> {
                 const SliverToBoxAdapter(child: SizedBox(height: 16)),
               ]),
             ),
+          ),
+        ],
+      ),
     );
+  }
+
+  Future<void> _exportEarnings() async {
+    setState(() => _isExporting = true);
+    try {
+      // Generate CSV content
+      final csv = _generateCSV();
+      
+      // Save to file
+      final directory = await getApplicationDocumentsDirectory();
+      final timestamp = DateTime.now().toIso8601String().split('T')[0];
+      final file = File('${directory.path}/rider_earnings_$timestamp.csv');
+      await file.writeAsString(csv);
+
+      // Share the file
+      await Share.shareXFiles(
+        [XFile(file.path)],
+        subject: 'Rider Earnings Report - $timestamp',
+      );
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Earnings report exported successfully'),
+            backgroundColor: Colors.green,
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Export failed: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _isExporting = false);
+    }
+  }
+
+  String _generateCSV() {
+    final buffer = StringBuffer();
+    buffer.writeln('Date,Order ID,Delivery Fee,Order Total,Payment Method');
+    
+    final history = List<Map<String, dynamic>>.from(_data['history'] ?? []);
+    for (final h in history) {
+      final date = h['created_at']?.toString().substring(0, 10) ?? '';
+      final orderId = h['order_id']?.toString() ?? '';
+      final fee = _fmt(h['amount']);
+      final total = _fmt(h['order_total']);
+      final payment = h['payment_method']?.toString().toUpperCase() ?? 'COD';
+      
+      buffer.writeln('$date,$orderId,$fee,$total,$payment');
+    }
+    
+    // Add summary
+    buffer.writeln('');
+    buffer.writeln('Summary');
+    buffer.writeln('Total Earnings,${_fmt(_data['total'])}');
+    buffer.writeln('Today Earnings,${_fmt(_data['today'])}');
+    buffer.writeln('Week Earnings,${_fmt(_data['week'])}');
+    buffer.writeln('Month Earnings,${_fmt(_data['month'])}');
+    buffer.writeln('Total Deliveries,${_data['deliveries'] ?? 0}');
+    
+    return buffer.toString();
   }
 
   Widget _chip(String label, String val) => Expanded(

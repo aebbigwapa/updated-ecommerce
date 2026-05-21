@@ -7,7 +7,7 @@
 
 import 'package:flutter_test/flutter_test.dart';
 
-import 'package:mobile_application/main.dart';
+import 'package:grande/main.dart';
 
 void main() {
   testWidgets('App loads correctly', (WidgetTester tester) async {

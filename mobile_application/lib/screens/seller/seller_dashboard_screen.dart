@@ -5,6 +5,9 @@ import '../../theme/app_theme.dart';
 import '../../services/api_service.dart';
 import '../../services/realtime_service.dart';
 import 'seller_add_product_screen.dart';
+import 'seller_notifications_screen.dart';
+import 'seller_messages_screen.dart';
+import 'seller_analytics_screen.dart';
 
 class SellerDashboardScreen extends StatefulWidget {
   const SellerDashboardScreen({super.key});
@@ -19,18 +22,14 @@ class _SellerDashboardScreenState extends State<SellerDashboardScreen>
   Map<String, dynamic> _stats = {};
   List<Map<String, dynamic>> _recentOrders = [];
   bool _isLoading = true;
-  bool _isSyncing = false;
+  int _unreadNotifications = 0;
+  int _unreadMessages = 0;
   StreamSubscription<void>? _ordersSub;
   StreamSubscription<void>? _productsSub;
-  late AnimationController _pulseCtrl;
 
   @override
   void initState() {
     super.initState();
-    _pulseCtrl = AnimationController(
-      vsync: this,
-      duration: const Duration(seconds: 2),
-    )..repeat(reverse: true);
     _load();
     RealtimeService.instance.subscribeOrders();
     RealtimeService.instance.subscribeProducts();
@@ -44,7 +43,6 @@ class _SellerDashboardScreenState extends State<SellerDashboardScreen>
 
   @override
   void dispose() {
-    _pulseCtrl.dispose();
     _ordersSub?.cancel();
     _productsSub?.cancel();
     RealtimeService.instance.unsubscribeAll();
@@ -74,27 +72,34 @@ class _SellerDashboardScreenState extends State<SellerDashboardScreen>
 
   Future<void> _loadStats({bool silent = false}) async {
     if (!silent && mounted) setState(() => _isLoading = true);
-    if (silent && mounted) setState(() => _isSyncing = true);
     try {
       final token = await ApiService.getAuthToken();
       if (token == null) return;
       final results = await Future.wait([
         ApiService.get('/api/seller/dashboard', token: token),
         ApiService.get('/api/seller/orders', token: token),
+        ApiService.get('/api/seller/notifications', token: token),
+        ApiService.getUnreadMessageCount(token),
       ]);
       if (mounted) {
-        final orders = results[1]['orders'] is List
-            ? List<Map<String, dynamic>>.from(results[1]['orders'] as List)
+        final dashboardData = results[0] as Map<String, dynamic>;
+        final ordersData = results[1] as Map<String, dynamic>;
+        final notificationsData = results[2] as Map<String, dynamic>;
+        final unreadCount = results[3] as int;
+        
+        final orders = ordersData['orders'] is List
+            ? List<Map<String, dynamic>>.from(ordersData['orders'] as List)
             : <Map<String, dynamic>>[];
         setState(() {
-          _stats = results[0];
+          _stats = dashboardData;
           _recentOrders = orders.take(5).toList();
+          _unreadNotifications = notificationsData['unread_count'] ?? 0;
+          _unreadMessages = unreadCount;
           _isLoading = false;
-          _isSyncing = false;
         });
       }
     } catch (_) {
-      if (mounted) setState(() { _isLoading = false; _isSyncing = false; });
+      if (mounted) setState(() => _isLoading = false);
     }
   }
 
@@ -188,37 +193,78 @@ class _SellerDashboardScreenState extends State<SellerDashboardScreen>
               fontWeight: FontWeight.w700,
               color: Colors.white)),
       actions: [
-        if (_isSyncing)
-          const Padding(
-            padding: EdgeInsets.symmetric(horizontal: 8),
-            child: Center(
-              child: SizedBox(
-                width: 16, height: 16,
-                child: CircularProgressIndicator(
-                    color: Colors.white70, strokeWidth: 2),
-              ),
+        Stack(
+          children: [
+            IconButton(
+              icon: const Icon(Icons.chat_bubble_outline, color: Colors.white70),
+              onPressed: () => Navigator.push(
+                context,
+                MaterialPageRoute(builder: (_) => const SellerMessagesScreen()),
+              ).then((_) => _loadStats(silent: true)),
             ),
-          )
-        else
-          AnimatedBuilder(
-            animation: _pulseCtrl,
-            builder: (_, a) => Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 12),
-              child: Row(mainAxisSize: MainAxisSize.min, children: [
-                Container(
-                  width: 8, height: 8,
-                  decoration: BoxDecoration(
+            if (_unreadMessages > 0)
+              Positioned(
+                right: 8,
+                top: 8,
+                child: Container(
+                  padding: const EdgeInsets.all(4),
+                  decoration: const BoxDecoration(
+                    color: Colors.red,
                     shape: BoxShape.circle,
-                    color: Colors.greenAccent
-                        .withValues(alpha: 0.4 + 0.6 * _pulseCtrl.value),
+                  ),
+                  constraints: const BoxConstraints(
+                    minWidth: 16,
+                    minHeight: 16,
+                  ),
+                  child: Text(
+                    _unreadMessages > 9 ? '9+' : '$_unreadMessages',
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 10,
+                      fontWeight: FontWeight.w700,
+                    ),
+                    textAlign: TextAlign.center,
                   ),
                 ),
-                const SizedBox(width: 4),
-                const Text('Live',
-                    style: TextStyle(fontSize: 11, color: Colors.white70)),
-              ]),
+              ),
+          ],
+        ),
+        Stack(
+          children: [
+            IconButton(
+              icon: const Icon(Icons.notifications_outlined, color: Colors.white70),
+              onPressed: () => Navigator.push(
+                context,
+                MaterialPageRoute(builder: (_) => const SellerNotificationsScreen()),
+              ).then((_) => _loadStats(silent: true)),
             ),
-          ),
+            if (_unreadNotifications > 0)
+              Positioned(
+                right: 8,
+                top: 8,
+                child: Container(
+                  padding: const EdgeInsets.all(4),
+                  decoration: const BoxDecoration(
+                    color: Colors.red,
+                    shape: BoxShape.circle,
+                  ),
+                  constraints: const BoxConstraints(
+                    minWidth: 16,
+                    minHeight: 16,
+                  ),
+                  child: Text(
+                    _unreadNotifications > 9 ? '9+' : '$_unreadNotifications',
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 10,
+                      fontWeight: FontWeight.w700,
+                    ),
+                    textAlign: TextAlign.center,
+                  ),
+                ),
+              ),
+          ],
+        ),
         IconButton(
             icon: const Icon(Icons.logout, color: Colors.white70),
             onPressed: _logout),
@@ -243,7 +289,7 @@ class _SellerDashboardScreenState extends State<SellerDashboardScreen>
           Container(
             width: 48, height: 48,
             decoration: BoxDecoration(
-              color: Colors.white.withValues(alpha: 0.15),
+              color: Colors.white.withOpacity( 0.15),
               borderRadius: BorderRadius.circular(14),
             ),
             child: const Center(
@@ -252,7 +298,7 @@ class _SellerDashboardScreenState extends State<SellerDashboardScreen>
           const SizedBox(width: 12),
           Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
             Text('Welcome back,',
-                style: TextStyle(fontSize: 12, color: Colors.white.withValues(alpha: 0.7))),
+                style: TextStyle(fontSize: 12, color: Colors.white.withOpacity( 0.7))),
             Text(_name.isNotEmpty ? _name : 'Seller',
                 style: const TextStyle(
                     fontSize: 18, fontWeight: FontWeight.w700, color: Colors.white)),
@@ -277,7 +323,7 @@ class _SellerDashboardScreenState extends State<SellerDashboardScreen>
         Text(_storeName,
             style: TextStyle(
                 fontSize: 13,
-                color: Colors.white.withValues(alpha: 0.6),
+                color: Colors.white.withOpacity( 0.6),
                 fontWeight: FontWeight.w500)),
       ]),
     );
@@ -296,7 +342,7 @@ class _SellerDashboardScreenState extends State<SellerDashboardScreen>
         borderRadius: BorderRadius.circular(20),
         boxShadow: [
           BoxShadow(
-            color: const Color(0xFFFF2BAC).withValues(alpha: 0.3),
+            color: const Color(0xFFFF2BAC).withOpacity( 0.3),
             blurRadius: 16,
             offset: const Offset(0, 6),
           ),
@@ -310,7 +356,7 @@ class _SellerDashboardScreenState extends State<SellerDashboardScreen>
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
             decoration: BoxDecoration(
-              color: Colors.white.withValues(alpha: 0.2),
+              color: Colors.white.withOpacity( 0.2),
               borderRadius: BorderRadius.circular(20),
             ),
             child: const Text('Delivered only',
@@ -343,14 +389,14 @@ class _SellerDashboardScreenState extends State<SellerDashboardScreen>
         const SizedBox(height: 2),
         Text(label,
             style: TextStyle(
-                fontSize: 10, color: Colors.white.withValues(alpha: 0.7))),
+                fontSize: 10, color: Colors.white.withOpacity( 0.7))),
       ]),
     );
   }
 
   Widget _divider() => Container(
       width: 1, height: 32,
-      color: Colors.white.withValues(alpha: 0.3),
+      color: Colors.white.withOpacity( 0.3),
       margin: const EdgeInsets.symmetric(horizontal: 4));
 
   Widget _buildStatsRow() {
@@ -375,7 +421,7 @@ class _SellerDashboardScreenState extends State<SellerDashboardScreen>
           borderRadius: BorderRadius.circular(16),
           boxShadow: [
             BoxShadow(
-                color: Colors.black.withValues(alpha: 0.05),
+                color: Colors.black.withOpacity( 0.05),
                 blurRadius: 8,
                 offset: const Offset(0, 2))
           ],
@@ -384,7 +430,7 @@ class _SellerDashboardScreenState extends State<SellerDashboardScreen>
           Container(
             padding: const EdgeInsets.all(8),
             decoration: BoxDecoration(
-              color: color.withValues(alpha: 0.1),
+              color: color.withOpacity( 0.1),
               borderRadius: BorderRadius.circular(10),
             ),
             child: Icon(icon, color: color, size: 20),
@@ -417,7 +463,7 @@ class _SellerDashboardScreenState extends State<SellerDashboardScreen>
         borderRadius: BorderRadius.circular(16),
         boxShadow: [
           BoxShadow(
-              color: Colors.black.withValues(alpha: 0.05),
+              color: Colors.black.withOpacity( 0.05),
               blurRadius: 8,
               offset: const Offset(0, 2))
         ],
@@ -450,10 +496,10 @@ class _SellerDashboardScreenState extends State<SellerDashboardScreen>
                 margin: const EdgeInsets.symmetric(horizontal: 3),
                 padding: const EdgeInsets.symmetric(vertical: 12),
                 decoration: BoxDecoration(
-                  color: color.withValues(alpha: 0.08),
+                  color: color.withOpacity( 0.08),
                   borderRadius: BorderRadius.circular(12),
                   border: Border.all(
-                      color: color.withValues(alpha: 0.2), width: 1),
+                      color: color.withOpacity( 0.2), width: 1),
                 ),
                 child: Column(children: [
                   Text('$count',
@@ -477,12 +523,12 @@ class _SellerDashboardScreenState extends State<SellerDashboardScreen>
 
   Widget _buildQuickActions() {
     final actions = [
-      {'emoji': '📦', 'label': 'Products',    'route': '/seller/products'},
-      {'emoji': '🛒', 'label': 'Orders',      'route': '/seller/orders'},
-      {'emoji': '💰', 'label': 'Earnings',    'route': '/seller/earnings'},
-      {'emoji': '🚚', 'label': 'Shipping',    'route': '/seller/shipping'},
-      {'emoji': '⭐', 'label': 'Reviews',     'route': '/seller/reviews'},
-      {'emoji': '🏪', 'label': 'Store',       'route': '/seller/store'},
+      {'emoji': '📦', 'label': 'Products',    'route': '/seller/products', 'special': false},
+      {'emoji': '🛒', 'label': 'Orders',      'route': '/seller/orders', 'special': false},
+      {'emoji': '💰', 'label': 'Earnings',    'route': '/seller/earnings', 'special': false},
+      {'emoji': '📊', 'label': 'Analytics',   'route': '/seller/analytics', 'special': true},
+      {'emoji': '🚚', 'label': 'Shipping',    'route': '/seller/shipping', 'special': false},
+      {'emoji': '⭐', 'label': 'Reviews',     'route': '/seller/reviews', 'special': false},
     ];
     return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
       Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
@@ -519,8 +565,18 @@ class _SellerDashboardScreenState extends State<SellerDashboardScreen>
         mainAxisSpacing: 10,
         childAspectRatio: 1.3,
         children: actions.map((a) => _actionCard(
-          a['emoji']!, a['label']!,
-          () => Navigator.pushNamed(context, a['route']!),
+          a['emoji']! as String,
+          a['label']! as String,
+          () {
+            if (a['special'] == true) {
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (_) => const SellerAnalyticsScreen()),
+              );
+            } else {
+              Navigator.pushNamed(context, a['route']! as String);
+            }
+          },
         )).toList(),
       ),
     ]);
@@ -535,7 +591,7 @@ class _SellerDashboardScreenState extends State<SellerDashboardScreen>
           borderRadius: BorderRadius.circular(14),
           boxShadow: [
             BoxShadow(
-                color: Colors.black.withValues(alpha: 0.05),
+                color: Colors.black.withOpacity( 0.05),
                 blurRadius: 6,
                 offset: const Offset(0, 2))
           ],
@@ -559,7 +615,7 @@ class _SellerDashboardScreenState extends State<SellerDashboardScreen>
         borderRadius: BorderRadius.circular(16),
         boxShadow: [
           BoxShadow(
-              color: Colors.black.withValues(alpha: 0.05),
+              color: Colors.black.withOpacity( 0.05),
               blurRadius: 8,
               offset: const Offset(0, 2))
         ],
@@ -632,7 +688,7 @@ class _SellerDashboardScreenState extends State<SellerDashboardScreen>
         Container(
           padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
           decoration: BoxDecoration(
-            color: color.withValues(alpha: 0.1),
+            color: color.withOpacity( 0.1),
             borderRadius: BorderRadius.circular(8),
           ),
           child: Text(status.replaceAll('_', ' ').toUpperCase(),
@@ -668,7 +724,7 @@ class _SellerDashboardScreenState extends State<SellerDashboardScreen>
             Container(
               width: 56, height: 56,
               decoration: BoxDecoration(
-                color: Colors.white.withValues(alpha: 0.2),
+                color: Colors.white.withOpacity( 0.2),
                 borderRadius: BorderRadius.circular(16),
               ),
               child: const Center(
@@ -684,12 +740,12 @@ class _SellerDashboardScreenState extends State<SellerDashboardScreen>
             Text(_name,
                 style: TextStyle(
                     fontSize: 12,
-                    color: Colors.white.withValues(alpha: 0.7))),
+                    color: Colors.white.withOpacity( 0.7))),
             const SizedBox(height: 10),
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
               decoration: BoxDecoration(
-                color: Colors.white.withValues(alpha: 0.15),
+                color: Colors.white.withOpacity( 0.15),
                 borderRadius: BorderRadius.circular(20),
               ),
               child: const Text('👑 Active Seller',
@@ -725,6 +781,28 @@ class _SellerDashboardScreenState extends State<SellerDashboardScreen>
             ),
             _drawerItem(Icons.payments_outlined, 'Earnings',
                 '/seller/earnings'),
+            ListTile(
+              leading: Container(
+                width: 36, height: 36,
+                decoration: BoxDecoration(
+                  color: Colors.transparent,
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: const Icon(Icons.bar_chart, color: AppTheme.textLight, size: 20),
+              ),
+              title: const Text('Analytics',
+                  style: TextStyle(
+                      fontWeight: FontWeight.w500,
+                      color: AppTheme.textDark,
+                      fontSize: 14)),
+              onTap: () {
+                Navigator.pop(context);
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (_) => const SellerAnalyticsScreen()),
+                );
+              },
+            ),
             const Padding(
               padding: EdgeInsets.fromLTRB(16, 16, 16, 4),
               child: Text('PROFILE',
@@ -735,6 +813,121 @@ class _SellerDashboardScreenState extends State<SellerDashboardScreen>
             _drawerItem(Icons.storefront_outlined, 'Store Profile',
                 '/seller/store'),
             _drawerItem(Icons.star_outline, 'Reviews', '/seller/reviews'),
+            const Padding(
+              padding: EdgeInsets.fromLTRB(16, 16, 16, 4),
+              child: Text('COMMUNICATION',
+                  style: TextStyle(
+                      fontSize: 10, fontWeight: FontWeight.w700,
+                      color: AppTheme.textLight, letterSpacing: 1.2)),
+            ),
+            ListTile(
+              leading: Container(
+                width: 36, height: 36,
+                decoration: BoxDecoration(
+                  color: Colors.transparent,
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Stack(
+                  children: [
+                    const Center(
+                      child: Icon(Icons.notifications_outlined,
+                          color: AppTheme.textLight, size: 20),
+                    ),
+                    if (_unreadNotifications > 0)
+                      Positioned(
+                        right: 0,
+                        top: 0,
+                        child: Container(
+                          padding: const EdgeInsets.all(4),
+                          decoration: const BoxDecoration(
+                            color: Colors.red,
+                            shape: BoxShape.circle,
+                          ),
+                          constraints: const BoxConstraints(
+                            minWidth: 16,
+                            minHeight: 16,
+                          ),
+                          child: Text(
+                            _unreadNotifications > 9 ? '9+' : '$_unreadNotifications',
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 8,
+                              fontWeight: FontWeight.w700,
+                            ),
+                            textAlign: TextAlign.center,
+                          ),
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+              title: const Text('Notifications',
+                  style: TextStyle(
+                      fontWeight: FontWeight.w500,
+                      color: AppTheme.textDark,
+                      fontSize: 14)),
+              onTap: () {
+                Navigator.pop(context);
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (_) => const SellerNotificationsScreen()),
+                ).then((_) => _loadStats(silent: true));
+              },
+            ),
+            ListTile(
+              leading: Container(
+                width: 36, height: 36,
+                decoration: BoxDecoration(
+                  color: Colors.transparent,
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Stack(
+                  children: [
+                    const Center(
+                      child: Icon(Icons.chat_bubble_outline,
+                          color: AppTheme.textLight, size: 20),
+                    ),
+                    if (_unreadMessages > 0)
+                      Positioned(
+                        right: 0,
+                        top: 0,
+                        child: Container(
+                          padding: const EdgeInsets.all(4),
+                          decoration: const BoxDecoration(
+                            color: Colors.red,
+                            shape: BoxShape.circle,
+                          ),
+                          constraints: const BoxConstraints(
+                            minWidth: 16,
+                            minHeight: 16,
+                          ),
+                          child: Text(
+                            _unreadMessages > 9 ? '9+' : '$_unreadMessages',
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 8,
+                              fontWeight: FontWeight.w700,
+                            ),
+                            textAlign: TextAlign.center,
+                          ),
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+              title: const Text('Messages',
+                  style: TextStyle(
+                      fontWeight: FontWeight.w500,
+                      color: AppTheme.textDark,
+                      fontSize: 14)),
+              onTap: () {
+                Navigator.pop(context);
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (_) => const SellerMessagesScreen()),
+                ).then((_) => _loadStats(silent: true));
+              },
+            ),
           ]),
         ),
         Container(
@@ -747,7 +940,7 @@ class _SellerDashboardScreenState extends State<SellerDashboardScreen>
               leading: Container(
                 width: 40, height: 40,
                 decoration: BoxDecoration(
-                  color: Colors.red.withValues(alpha: 0.1),
+                  color: Colors.red.withOpacity( 0.1),
                   borderRadius: BorderRadius.circular(10),
                 ),
                 child: const Icon(Icons.logout, color: Colors.red, size: 20),
@@ -774,7 +967,7 @@ class _SellerDashboardScreenState extends State<SellerDashboardScreen>
         width: 36, height: 36,
         decoration: BoxDecoration(
           color: isActive
-              ? AppTheme.primaryLight.withValues(alpha: 0.1)
+              ? AppTheme.primaryLight.withOpacity( 0.1)
               : Colors.transparent,
           borderRadius: BorderRadius.circular(8),
         ),
