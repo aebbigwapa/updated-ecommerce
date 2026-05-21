@@ -11,12 +11,12 @@ class ApiService {
   static const String supabaseAnonKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im9wdXNyb3RxaHRraG1lZWZ2eWRoIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzc1NTU3MzMsImV4cCI6MjA5MzEzMTczM30.-Lo362tNRftWbvXK2kds7r5CpDeXb5vYN6K3rBhQlvw';
 
   // Flask backend base URL
-  // Use your machine IP for physical devices on the same Wi-Fi.
+  // Production: https://ecommerce-backend-o0hl.onrender.com
   // Override using --dart-define=FLASK_BASE_URL=http://<host-ip>:5000
   static final String flaskBaseUrl = () {
     const envUrl = String.fromEnvironment('FLASK_BASE_URL');
     if (envUrl.isNotEmpty) return envUrl;
-    return 'http://192.168.123.36:5000';
+    return 'https://ecommerce-backend-o0hl.onrender.com';
   }();
 
   static final ValueNotifier<int> cartCount = ValueNotifier<int>(0);
