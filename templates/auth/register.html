@@ -353,7 +353,19 @@
                     <div class="pin-status" id="pinStatus"></div>
                 </div>
 
-                <div style="display:flex;gap:10px;margin-top:8px">
+                <!-- Consent checkboxes -->
+                <div style="margin-top:16px">
+                    <label style="display:flex;align-items:flex-start;gap:8px;font-size:13px;cursor:pointer">
+                        <input type="checkbox" id="consentTerms" style="margin-top:2px;flex-shrink:0">
+                        <span>I have read and agree to the <a href="/terms" target="_blank" style="color:var(--pink)">Terms &amp; Conditions</a> <span style="color:var(--pink)">*</span></span>
+                    </label>
+                    <label style="display:flex;align-items:flex-start;gap:8px;font-size:13px;cursor:pointer;margin-top:8px">
+                        <input type="checkbox" id="consentPrivacy" style="margin-top:2px;flex-shrink:0">
+                        <span>I consent to the collection and processing of my personal data as described in the <a href="/privacy" target="_blank" style="color:var(--pink)">Privacy Policy</a> <span style="color:var(--pink)">*</span></span>
+                    </label>
+                </div>
+
+                <div style="display:flex;gap:10px;margin-top:16px">
                     <button type="button" class="btn" style="background:var(--border);color:var(--dark);flex:1" onclick="goToStep(2)">← Back</button>
                     <button type="submit" class="btn" style="flex:2" id="submitBtn">Create Account</button>
                 </div>

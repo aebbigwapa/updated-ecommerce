@@ -296,7 +296,7 @@ function showName(input, targetId) {
     document.getElementById(targetId).textContent = input.files[0] ? '✅ ' + input.files[0].name : '';
 }
 
-// ── Submit ────────────────────────────────────────────────────
+// ── Submit ────────────────────────────────────────────────────────────────────
 document.getElementById('registerForm').addEventListener('submit', async (e) => {
     e.preventDefault();
     const errorMsg   = document.getElementById('errorMsg');
@@ -308,6 +308,16 @@ document.getElementById('registerForm').addEventListener('submit', async (e) => 
 
     errorMsg.style.display   = 'none';
     successMsg.style.display = 'none';
+
+    if (!g('consentTerms').checked) {
+        showError('You must agree to the Terms & Conditions to register.');
+        return;
+    }
+    if (!g('consentPrivacy').checked) {
+        showError('You must consent to the Privacy Policy to register.');
+        return;
+    }
+
     btn.disabled    = true;
     btn.textContent = 'Submitting...';
 
@@ -321,6 +331,8 @@ document.getElementById('registerForm').addEventListener('submit', async (e) => 
     fd.append('password',    g('password').value);
     fd.append('role',        role);
     fd.append('otp_verified', 'true');
+    fd.append('consent_terms',   'true');
+    fd.append('consent_privacy', 'true');
     fd.append('region',      addr.region);
     fd.append('province',    addr.province);
     fd.append('city',        addr.city);

@@ -148,6 +148,12 @@ def api_register():
     if role not in ('buyer', 'seller', 'rider'):
         return api_error("Invalid role. Must be buyer, seller, or rider.", status=400)
 
+    # Enforce consent
+    if str(data.get('consent_terms', '')).strip().lower() != 'true':
+        return api_error("You must agree to the Terms & Conditions.", status=400)
+    if str(data.get('consent_privacy', '')).strip().lower() != 'true':
+        return api_error("You must consent to the Privacy Policy.", status=400)
+
     from services.auth_service import AuthService
     try:
         result = AuthService().register_user(data, files)
