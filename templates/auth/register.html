@@ -283,93 +283,93 @@
             </div>
         </div>
 
-            <!-- ══ STEP 3: Location ══ -->
-            <div class="step-content" id="step3" style="display:none">
-                <div class="section-title">Your Location <span style="font-weight:400;text-transform:none">(optional)</span></div>
+        <!-- ══ STEP 3: Location ══ -->
+        <div class="step-content" id="step3" style="display:none">
+            <div class="section-title">Your Location <span style="font-weight:400;text-transform:none">(optional)</span></div>
 
-                <div class="form-group">
-                    <label class="addr-label">Region</label>
-                    <div class="select-wrapper">
-                        <select class="addr-select" id="addrRegion">
-                            <option value="">Loading regions...</option>
-                        </select>
-                    </div>
-                </div>
-
-                <div class="form-group">
-                    <label class="addr-label">Province</label>
-                    <div class="select-wrapper">
-                        <select class="addr-select" id="addrProvince" disabled>
-                            <option value="">Select Province</option>
-                        </select>
-                    </div>
-                </div>
-
-                <div class="form-row">
-                    <div class="form-group">
-                        <label class="addr-label">City / Municipality</label>
-                        <div class="select-wrapper">
-                            <select class="addr-select" id="addrCity" disabled>
-                                <option value="">Select City/Municipality</option>
-                            </select>
-                        </div>
-                    </div>
-                    <div class="form-group">
-                        <label class="addr-label">Barangay</label>
-                        <div class="select-wrapper">
-                            <select class="addr-select" id="addrBarangay" disabled>
-                                <option value="">Select Barangay</option>
-                            </select>
-                        </div>
-                    </div>
-                </div>
-
-                <div class="form-row">
-                    <div class="form-group">
-                        <label class="addr-label">Street / House No.</label>
-                        <input type="text" class="addr-input" id="addrStreet" placeholder="e.g. 123 Rizal St.">
-                    </div>
-                    <div class="form-group">
-                        <label class="addr-label">ZIP Code</label>
-                        <input type="text" class="addr-input" id="addrZip" placeholder="e.g. 1127">
-                    </div>
-                </div>
-
-                <div class="form-group">
-                    <label class="addr-label">Pin Your Exact Location</label>
-                    <button type="button" class="btn-geolocate" id="btnGeolocate">
-                        📍 Use My Current Location
-                    </button>
-                    <div class="map-instructions">
-                        📍 <span id="mapInstructionText">Please tap or drag the pin to set your exact delivery location</span>
-                    </div>
-                    <div id="psgcMap"></div>
-                    <div class="map-coords" id="addrCoordsDisplay">📍 Lat: --, Lng: --</div>
-                    <div class="map-hint" id="mapHint">
-                        <span>Tip: Select an address above to auto-center, then adjust the pin for precision</span>
-                    </div>
-                    <input type="hidden" id="addrLatitude">
-                    <input type="hidden" id="addrLongitude">
-                    <div class="pin-status" id="pinStatus"></div>
-                </div>
-
-                <!-- Consent checkboxes -->
-                <div style="margin-top:16px">
-                    <label style="display:flex;align-items:flex-start;gap:8px;font-size:13px;cursor:pointer">
-                        <input type="checkbox" id="consentTerms" style="margin-top:2px;flex-shrink:0">
-                        <span>I have read and agree to the <a href="/terms" target="_blank" style="color:var(--pink)">Terms &amp; Conditions</a> <span style="color:var(--pink)">*</span></span>
-                    </label>
-                    <label style="display:flex;align-items:flex-start;gap:8px;font-size:13px;cursor:pointer;margin-top:8px">
-                        <input type="checkbox" id="consentPrivacy" style="margin-top:2px;flex-shrink:0">
-                        <span>I consent to the collection and processing of my personal data as described in the <a href="/privacy" target="_blank" style="color:var(--pink)">Privacy Policy</a> <span style="color:var(--pink)">*</span></span>
-                    </label>
-                </div>
-
-                <div style="display:flex;gap:10px;margin-top:16px">
-                    <button type="button" class="btn" style="background:var(--border);color:var(--dark);flex:1" onclick="goToStep(2)">← Back</button>
-                    <button type="submit" class="btn" style="flex:2" id="submitBtn">Create Account</button>
+            <div class="form-group">
+                <label class="addr-label">Region</label>
+                <div class="select-wrapper">
+                    <select class="addr-select" id="addrRegion">
+                        <option value="">Loading regions...</option>
+                    </select>
                 </div>
             </div>
+
+            <div class="form-group">
+                <label class="addr-label">Province</label>
+                <div class="select-wrapper">
+                    <select class="addr-select" id="addrProvince" disabled>
+                        <option value="">Select Province</option>
+                    </select>
+                </div>
+            </div>
+
+            <div class="form-row">
+                <div class="form-group">
+                    <label class="addr-label">City / Municipality</label>
+                    <div class="select-wrapper">
+                        <select class="addr-select" id="addrCity" disabled>
+                            <option value="">Select City/Municipality</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label class="addr-label">Barangay</label>
+                    <div class="select-wrapper">
+                        <select class="addr-select" id="addrBarangay" disabled>
+                            <option value="">Select Barangay</option>
+                        </select>
+                    </div>
+                </div>
+            </div>
+
+            <div class="form-row">
+                <div class="form-group">
+                    <label class="addr-label">Street / House No.</label>
+                    <input type="text" class="addr-input" id="addrStreet" placeholder="e.g. 123 Rizal St.">
+                </div>
+                <div class="form-group">
+                    <label class="addr-label">ZIP Code</label>
+                    <input type="text" class="addr-input" id="addrZip" placeholder="e.g. 1127">
+                </div>
+            </div>
+
+            <div class="form-group">
+                <label class="addr-label">Pin Your Exact Location</label>
+                <button type="button" class="btn-geolocate" id="btnGeolocate">
+                    📍 Use My Current Location
+                </button>
+                <div class="map-instructions">
+                    📍 <span id="mapInstructionText">Please tap or drag the pin to set your exact delivery location</span>
+                </div>
+                <div id="psgcMap"></div>
+                <div class="map-coords" id="addrCoordsDisplay">📍 Lat: --, Lng: --</div>
+                <div class="map-hint" id="mapHint">
+                    <span>Tip: Select an address above to auto-center, then adjust the pin for precision</span>
+                </div>
+                <input type="hidden" id="addrLatitude">
+                <input type="hidden" id="addrLongitude">
+                <div class="pin-status" id="pinStatus"></div>
+            </div>
+
+            <!-- Consent checkboxes -->
+            <div style="margin-top:16px;padding:14px;background:#fdf6f9;border-radius:8px;border:1px solid #f0d6e4">
+                <label style="display:flex;align-items:flex-start;gap:8px;font-size:13px;cursor:pointer">
+                    <input type="checkbox" id="consentTerms" style="margin-top:2px;flex-shrink:0">
+                    <span>I have read and agree to the <a href="/terms" target="_blank" style="color:var(--pink)">Terms &amp; Conditions</a> <span style="color:var(--pink)">*</span></span>
+                </label>
+                <label style="display:flex;align-items:flex-start;gap:8px;font-size:13px;cursor:pointer;margin-top:8px">
+                    <input type="checkbox" id="consentPrivacy" style="margin-top:2px;flex-shrink:0">
+                    <span>I consent to the collection and processing of my personal data as described in the <a href="/privacy" target="_blank" style="color:var(--pink)">Privacy Policy</a> <span style="color:var(--pink)">*</span></span>
+                </label>
+            </div>
+
+            <div style="display:flex;gap:10px;margin-top:16px">
+                <button type="button" class="btn" style="background:var(--border);color:var(--dark);flex:1" onclick="goToStep(2)">← Back</button>
+                <button type="submit" class="btn" style="flex:2" id="submitBtn">Create Account</button>
+            </div>
+        </div>
 
     </form>
 
