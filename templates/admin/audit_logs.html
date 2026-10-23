@@ -1,0 +1,155 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Grande Admin — Audit Logs</title>
+    <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@600;700&family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/dashboard.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/admin.css') }}">
+    <style>
+        .badge-action { padding:3px 10px; border-radius:20px; font-size:11px; font-weight:600; }
+        .badge-approve  { background:#d4edda; color:#155724; }
+        .badge-reject   { background:#f8d7da; color:#721c24; }
+        .badge-update   { background:#d1ecf1; color:#0c5460; }
+        .badge-login    { background:#e2d9f3; color:#4a235a; }
+        .badge-active_product { background:#d4edda; color:#155724; }
+        .badge-rejected_product { background:#f8d7da; color:#721c24; }
+        .device-info { font-size:11px; color:#888; }
+        .filter-row { display:flex; gap:10px; flex-wrap:wrap; margin-bottom:16px; align-items:center; }
+        .filter-row select, .filter-row input { padding:7px 12px; border:1px solid #e8e8f0; border-radius:8px; font-size:13px; }
+    </style>
+</head>
+<body>
+
+<div id="sidebarOverlay"></div>
+<button class="sidebar-toggle" id="sidebarToggle">&#9776;</button>
+
+<aside class="sidebar">
+    <div class="sidebar-logo">Grande Admin</div>
+    <ul class="sidebar-menu">
+        <li><a href="/admin"><span class="icon">🏠</span> Dashboard</a></li>
+        <li class="menu-group">MANAGE</li>
+        <li><a href="/admin/applications"><span class="icon">📋</span> Applications</a></li>
+        <li><a href="/admin/users"><span class="icon">👥</span> Users</a></li>
+        <li><a href="/admin/sellers"><span class="icon">🏪</span> Sellers</a></li>
+        <li><a href="/admin/riders"><span class="icon">🏍️</span> Riders</a></li>
+        <li class="menu-group">STORE</li>
+        <li><a href="/admin/products"><span class="icon">📦</span> Products</a></li>
+        <li><a href="/admin/orders"><span class="icon">🛒</span> Orders</a></li>
+        <li class="menu-group">SUPPORT</li>
+        <li><a href="/messages/admin"><span class="icon">💬</span> Chat Support</a></li>
+        <li class="menu-group">SYSTEM</li>
+        <li><a href="/admin/audit-logs" class="active"><span class="icon">🔍</span> Audit Logs</a></li>
+        <li><a href="/admin/reports"><span class="icon">🚩</span> Reports</a></li>
+        <li><a href="/admin/settings"><span class="icon">⚙️</span> Settings</a></li>
+    </ul>
+    <div class="sidebar-footer">
+        <div class="sidebar-user">👤 {{ session.user.name }}</div>
+        <a href="/logout" class="logout-link">🚪 Logout</a>
+    </div>
+</aside>
+
+<div class="main">
+    <div class="topbar">
+        <div class="topbar-title">Audit Logs</div>
+        <div class="topbar-right">Admin Panel</div>
+    </div>
+    <div class="content">
+
+        <div class="filter-row">
+            <select id="filterType" onchange="loadLogs()">
+                <option value="">All Actions</option>
+                <option value="application">Applications</option>
+                <option value="product">Products</option>
+                <option value="order">Orders</option>
+                <option value="user">Logins</option>
+            </select>
+            <input type="text" id="filterSearch" placeholder="Search action or details..." oninput="renderLogs()" style="min-width:220px">
+            <button onclick="loadLogs()" style="padding:7px 16px;background:#1a1a3e;color:#fff;border:none;border-radius:8px;cursor:pointer;font-size:13px;">🔄 Refresh</button>
+        </div>
+
+        <div class="card">
+            <div class="card-header"><h2>Activity Audit Trail</h2></div>
+            <div class="table-responsive">
+                <table class="table">
+                    <thead>
+                        <tr>
+                            <th>Date & Time</th>
+                            <th>Admin</th>
+                            <th>Action</th>
+                            <th>Target</th>
+                            <th>Details</th>
+                            <th>Device</th>
+                            <th>IP Address</th>
+                        </tr>
+                    </thead>
+                    <tbody id="auditTable"><tr><td colspan="7" style="text-align:center;padding:40px;color:#888">Loading...</td></tr></tbody>
+                </table>
+            </div>
+        </div>
+
+    </div>
+</div>
+
+<div class="toast" id="toast"></div>
+<script src="{{ url_for('static', filename='js/api.js') }}"></script>
+<script>
+let _allLogs = [];
+
+async function loadLogs() {
+    const type = document.getElementById('filterType').value;
+    const url  = '/admin/api/audit-logs?limit=100' + (type ? `&target_type=${type}` : '');
+    try {
+        const res  = await fetch(url, { credentials: 'include' });
+        _allLogs   = await res.json();
+        renderLogs();
+    } catch {
+        document.getElementById('auditTable').innerHTML = '<tr><td colspan="7" style="text-align:center;color:#e74c3c">Failed to load logs.</td></tr>';
+    }
+}
+
+function renderLogs() {
+    const search = document.getElementById('filterSearch').value.toLowerCase();
+    const logs   = _allLogs.filter(l =>
+        !search ||
+        (l.action || '').toLowerCase().includes(search) ||
+        (l.details || '').toLowerCase().includes(search) ||
+        (l.target_type || '').toLowerCase().includes(search)
+    );
+
+    if (!logs.length) {
+        document.getElementById('auditTable').innerHTML = '<tr><td colspan="7" style="text-align:center;padding:40px;color:#888">No logs found.</td></tr>';
+        return;
+    }
+
+    document.getElementById('auditTable').innerHTML = logs.map(l => {
+        const admin   = l.admin ? `${l.admin.first_name || ''} ${l.admin.last_name || ''}`.trim() || l.admin.email : '—';
+        const dt      = l.created_at ? new Date(l.created_at).toLocaleString() : '—';
+        const badge   = getBadge(l.action);
+        const device  = [l.device_browser, l.device_os, l.device_type].filter(Boolean).join(' · ') || '—';
+        return `<tr>
+            <td style="white-space:nowrap;font-size:12px">${dt}</td>
+            <td>${admin}</td>
+            <td><span class="badge-action ${badge.cls}">${badge.label}</span></td>
+            <td style="font-size:12px">${l.target_type || '—'}<br><span style="color:#aaa;font-size:11px">${(l.target_id || '').slice(0,8)}</span></td>
+            <td style="font-size:12px;max-width:200px">${l.details || '—'}</td>
+            <td class="device-info">${device}</td>
+            <td style="font-size:12px">${l.ip_address || '—'}</td>
+        </tr>`;
+    }).join('');
+}
+
+function getBadge(action) {
+    if (!action) return { cls: 'badge-update', label: 'unknown' };
+    if (action.includes('approve')) return { cls: 'badge-approve', label: action };
+    if (action.includes('reject'))  return { cls: 'badge-reject',  label: action };
+    if (action.includes('login'))   return { cls: 'badge-login',   label: '🔑 login' };
+    if (action.includes('active'))  return { cls: 'badge-approve', label: action };
+    return { cls: 'badge-update', label: action };
+}
+
+loadLogs();
+</script>
+</body>
+</html>

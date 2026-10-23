@@ -98,21 +98,21 @@ def admin_update_application_status(app_id):
         app_model.update_status(app_id, status, reject_reason=notes if status == 'rejected' else None)
         if status == 'approved':
             UserModel().update_role(application['user_id'], application['role'])
-            
-            # Send welcome email after approval
             try:
                 from services.email_service import send_welcome_email
                 user = UserModel().get_by_id(application['user_id'])
                 if user:
-                    email = user.get('email')
-                    name = f"{user.get('first_name', '')} {user.get('last_name', '')}".strip()
-                    role = application.get('role', 'buyer')
-                    send_welcome_email(email, name, role)
-                    print(f"[Admin] Welcome email sent to {email} (role: {role})")
+                    send_welcome_email(user.get('email'), f"{user.get('first_name','')} {user.get('last_name','')}".strip(), application.get('role','buyer'))
             except Exception as e:
                 print(f"[Admin] Failed to send welcome email: {e}")
-                # Don't fail the approval if email fails
-        
+        from security import log_audit
+        log_audit(
+            action=f'{status}_application',
+            target_type='application',
+            target_id=app_id,
+            details=f"Status set to '{status}'. Notes: {notes}" if notes else f"Status set to '{status}'",
+            admin_id=request.current_user['id']
+        )
         return api_response(message='Status updated')
     except Exception as e:
         return api_error(f'Failed: {e}', status=500)
@@ -172,6 +172,14 @@ def admin_update_product_status(product_id):
         updated = ProductModel().update_status(product_id, status, admin_id, reason)
         if not updated:
             return api_error('Product not found', status=404)
+        from security import log_audit
+        log_audit(
+            action=f'{status}_product',
+            target_type='product',
+            target_id=product_id,
+            details=f"Status set to '{status}'. Reason: {reason}" if reason else f"Status set to '{status}'",
+            admin_id=admin_id
+        )
         return api_response(message='Product status updated')
     except Exception as e:
         return api_error(f'Failed: {e}', status=500)
@@ -206,6 +214,14 @@ def admin_update_order_status(order_id):
         updated = OrderModel().update_status_for_admin(order_id, status, rider_id)
         if not updated:
             return api_error('Order not found or invalid status', status=404)
+        from security import log_audit
+        log_audit(
+            action='update_order_status',
+            target_type='order',
+            target_id=order_id,
+            details=f"Status set to '{status}'",
+            admin_id=request.current_user['id']
+        )
         return api_response(message='Order status updated')
     except Exception as e:
         return api_error(f'Failed: {e}', status=500)

@@ -23,6 +23,12 @@ admin_bp = Blueprint('admin', __name__, url_prefix='/admin')
 def dashboard():
     return render_template('admin/dashboard.html')
 
+@admin_bp.route('/audit-logs')
+@admin_required
+def audit_logs():
+    return render_template('admin/audit_logs.html')
+
+
 @admin_bp.route('/applications')
 @admin_required
 def applications():
@@ -108,8 +114,6 @@ def update_application_status(app_id):
         app_model.update_status(app_id, status, reject_reason=notes if status == 'rejected' else None)
         if status == 'approved':
             UserModel().update_role(application['user_id'], application['role'])
-            
-            # Send welcome email after approval
             try:
                 from services.email_service import send_welcome_email
                 user = UserModel().get_by_id(application['user_id'])
@@ -118,11 +122,16 @@ def update_application_status(app_id):
                     name = f"{user.get('first_name', '')} {user.get('last_name', '')}".strip()
                     role = application.get('role', 'buyer')
                     send_welcome_email(email, name, role)
-                    print(f"[Admin] Welcome email sent to {email} (role: {role})")
             except Exception as e:
                 print(f"[Admin] Failed to send welcome email: {e}")
-                # Don't fail the approval if email fails
-        
+        from security import log_audit
+        log_audit(
+            action=f'{status}_application',
+            target_type='application',
+            target_id=app_id,
+            details=f"Status set to '{status}'. Notes: {notes}" if notes else f"Status set to '{status}'",
+            admin_id=session['user']['id']
+        )
         return jsonify({'success': True, 'message': 'Status updated'})
     except Exception as e:
         return jsonify({'error': str(e)}), 500
@@ -174,6 +183,14 @@ def update_product_status(product_id):
         updated = ProductModel().update_status(product_id, status, session['user']['id'], reason)
         if not updated:
             return jsonify({'error': 'Product not found'}), 404
+        from security import log_audit
+        log_audit(
+            action=f'{status}_product',
+            target_type='product',
+            target_id=product_id,
+            details=f"Status set to '{status}'. Reason: {reason}" if reason else f"Status set to '{status}'",
+            admin_id=session['user']['id']
+        )
         return jsonify({'success': True, 'product': updated})
     except Exception as e:
         return jsonify({'error': str(e)}), 500
@@ -198,6 +215,14 @@ def api_admin_order_status(order_id):
     updated = OrderModel().update_status_for_admin(order_id, status, rider_id)
     if not updated:
         return jsonify({'error': 'Order not found or invalid status'}), 404
+    from security import log_audit
+    log_audit(
+        action='update_order_status',
+        target_type='order',
+        target_id=order_id,
+        details=f"Status set to '{status}'",
+        admin_id=session['user']['id']
+    )
 
     buyer_id = updated.get('buyer_id')
     if buyer_id:
@@ -245,6 +270,24 @@ def api_admin_cancel_order(order_id):
             }), 400
     except Exception as e:
         return jsonify({'error': str(e)}), 500
+
+@admin_bp.route('/api/audit-logs', methods=['GET'])
+@admin_required
+def api_audit_logs():
+    """Get admin audit logs with optional filters."""
+    import os
+    from supabase import create_client
+    sb = create_client(os.getenv('SUPABASE_URL'), os.getenv('SUPABASE_SERVICE_ROLE_KEY'))
+    limit       = min(int(request.args.get('limit', 50)), 200)
+    target_type = request.args.get('target_type', '').strip() or None
+    query = sb.table('audit_logs').select(
+        'id, action, target_type, target_id, details, ip_address, device_os, device_browser, device_type, created_at, admin:users(first_name, last_name, email)'
+    ).order('created_at', desc=True).limit(limit)
+    if target_type:
+        query = query.eq('target_type', target_type)
+    rows = query.execute()
+    return jsonify(rows.data or [])
+
 
 @admin_bp.route('/api/stats', methods=['GET'])
 @admin_required

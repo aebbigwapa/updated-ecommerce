@@ -356,9 +356,21 @@ def _handle_login():
         
         if result.get('success'):
             session['user'] = result['user']
-            session.permanent = True  # persist across browser restarts
-            from security import clear_login_attempts
+            session.permanent = True
+            from security import clear_login_attempts, parse_device, log_audit
             clear_login_attempts(email)
+            # Store device info in session
+            ua = request.headers.get('User-Agent', '')
+            device = parse_device(ua)
+            session['device'] = device
+            # Audit log
+            log_audit(
+                action='login',
+                target_type='user',
+                target_id=result['user'].get('id', ''),
+                details=f"Login via {device['browser']} on {device['os']} ({device['device_type']})",
+                admin_id=result['user'].get('id')
+            )
             role = result['user'].get('role', 'user')
             if role == 'admin':
                 redirect_url = url_for('admin.dashboard')

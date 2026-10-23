@@ -385,6 +385,44 @@ def safe_path_component(value):
     return not bool(_TRAVERSAL_RE.search(value))
 
 
+# ── Device Parser ────────────────────────────────────────────
+
+def parse_device(user_agent: str) -> dict:
+    """Parse User-Agent string into device, browser, and OS info."""
+    ua = user_agent or ''
+    # OS
+    if 'Windows NT 10' in ua:   os_name = 'Windows 10/11'
+    elif 'Windows NT 6.3' in ua: os_name = 'Windows 8.1'
+    elif 'Windows NT 6.1' in ua: os_name = 'Windows 7'
+    elif 'Windows' in ua:        os_name = 'Windows'
+    elif 'iPhone' in ua:         os_name = 'iOS (iPhone)'
+    elif 'iPad' in ua:           os_name = 'iOS (iPad)'
+    elif 'Android' in ua:
+        import re
+        m = re.search(r'Android ([\d.]+)', ua)
+        os_name = f"Android {m.group(1)}" if m else 'Android'
+    elif 'Mac OS X' in ua:       os_name = 'macOS'
+    elif 'Linux' in ua:          os_name = 'Linux'
+    else:                        os_name = 'Unknown OS'
+    # Browser
+    if 'Edg/' in ua:             browser = 'Microsoft Edge'
+    elif 'OPR/' in ua or 'Opera' in ua: browser = 'Opera'
+    elif 'Chrome/' in ua:        browser = 'Chrome'
+    elif 'Firefox/' in ua:       browser = 'Firefox'
+    elif 'Safari/' in ua:        browser = 'Safari'
+    elif 'MSIE' in ua or 'Trident' in ua: browser = 'Internet Explorer'
+    elif 'okhttp' in ua.lower() or 'dart' in ua.lower(): browser = 'Mobile App'
+    else:                        browser = 'Unknown Browser'
+    # Device type
+    if any(x in ua for x in ['iPhone', 'Android', 'iPad', 'Mobile']):
+        device_type = 'Mobile'
+    elif 'Tablet' in ua or 'iPad' in ua:
+        device_type = 'Tablet'
+    else:
+        device_type = 'Desktop'
+    return {'os': os_name, 'browser': browser, 'device_type': device_type, 'raw': ua[:300]}
+
+
 # ── Activity Logging (Security Events) ────────────────────────
 
 def log_activity(sb_client, user_id, action, ip_address, user_agent=None):
@@ -427,6 +465,39 @@ def log_account_locked(sb_client, identifier, ip_address, user_agent=None):
         except Exception:
             pass
     log_activity(sb_client, user_id, 'account_locked', ip_address, user_agent)
+
+
+def log_audit(action: str, target_type: str, target_id: str, details: str = '', admin_id: str = None):
+    """
+    Write an admin audit log entry to the audit_logs table.
+    action      : e.g. 'approve_application', 'reject_product', 'update_order_status'
+    target_type : e.g. 'application', 'product', 'order', 'user'
+    target_id   : the ID of the affected record
+    details     : extra context (reason, notes, new status, etc.)
+    admin_id    : ID of the admin performing the action
+    """
+    try:
+        import os
+        from supabase import create_client
+        from flask import request as _req
+        sb = create_client(os.getenv('SUPABASE_URL'), os.getenv('SUPABASE_SERVICE_ROLE_KEY'))
+        ip = _req.headers.get('X-Forwarded-For', _req.remote_addr) or 'unknown'
+        ua = _req.headers.get('User-Agent', '') or ''
+        device = parse_device(ua)
+        sb.table('audit_logs').insert({
+            'admin_id':    admin_id,
+            'action':      action[:200],
+            'target_type': target_type[:50],
+            'target_id':   str(target_id)[:100],
+            'details':     details[:500],
+            'ip_address':  ip[:45],
+            'device_os':   device['os'],
+            'device_browser': device['browser'],
+            'device_type': device['device_type'],
+            'user_agent':  device['raw'],
+        }).execute()
+    except Exception:
+        pass
 
 
 # ── reCAPTCHA Verification ─────────────────────────────────────
