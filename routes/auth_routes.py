@@ -344,8 +344,10 @@ def _handle_login():
             return jsonify({'error': lockout_msg}), 403
         
         # Skip CAPTCHA for mobile API requests (token-based, no browser session)
+        # Also skip on localhost for development
         is_api = request.path.startswith('/api/')
-        if not is_api:
+        is_localhost = request.remote_addr in ('127.0.0.1', '::1')
+        if not is_api and not is_localhost:
             is_valid, captcha_error = verify_recaptcha(captcha_response)
             if not is_valid:
                 return jsonify({'error': 'CAPTCHA verification failed. Please try again.'}), 400
