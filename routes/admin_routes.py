@@ -16,12 +16,76 @@ def admin_required(f):
         return f(*args, **kwargs)
     return decorated
 
-admin_bp = Blueprint('admin', __name__, url_prefix='/admin')
+admin_bp = Blueprint('admin', __name__)
 
 @admin_bp.route('/')
 @admin_required
 def dashboard():
     return render_template('admin/dashboard.html')
+
+@admin_bp.route('/backup')
+@admin_required
+def backup():
+    return render_template('admin/backup.html')
+
+
+@admin_bp.route('/api/backup/create', methods=['POST'])
+@admin_required
+def api_backup_create():
+    from services.backup_service import BackupService
+    data  = request.get_json() or {}
+    notes = str(data.get('notes', '')).strip()[:200]
+    admin_name = f"{session['user'].get('first_name','')} {session['user'].get('last_name','')}".strip()
+    try:
+        result = BackupService().create_backup(triggered_by=admin_name or 'admin', notes=notes)
+        from security import log_audit
+        log_audit(action='create_backup', target_type='system', target_id=result.get('backup_id',''),
+                  details=f"Backup created: {result.get('file_name','')} ({result.get('file_size_kb',0)} KB, {result.get('total_rows',0)} rows)",
+                  admin_id=session['user']['id'], actor_role='admin')
+        return jsonify(result)
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@admin_bp.route('/api/backup/history', methods=['GET'])
+@admin_required
+def api_backup_history():
+    from services.backup_service import BackupService
+    limit = min(int(request.args.get('limit', 20)), 50)
+    try:
+        history = BackupService().get_backup_history(limit)
+        return jsonify(history)
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@admin_bp.route('/api/backup/<backup_id>/download', methods=['GET'])
+@admin_required
+def api_backup_download(backup_id):
+    from services.backup_service import BackupService
+    try:
+        url = BackupService().get_download_url(backup_id)
+        if not url:
+            return jsonify({'error': 'Backup not found or URL unavailable'}), 404
+        return jsonify({'url': url})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@admin_bp.route('/api/backup/<backup_id>', methods=['DELETE'])
+@admin_required
+def api_backup_delete(backup_id):
+    from services.backup_service import BackupService
+    try:
+        ok = BackupService().delete_backup(backup_id)
+        if ok:
+            from security import log_audit
+            log_audit(action='delete_backup', target_type='system', target_id=backup_id,
+                      details='Backup deleted by admin', admin_id=session['user']['id'], actor_role='admin')
+        return jsonify({'success': ok})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
 
 @admin_bp.route('/audit-logs')
 @admin_required
@@ -130,7 +194,8 @@ def update_application_status(app_id):
             target_type='application',
             target_id=app_id,
             details=f"Status set to '{status}'. Notes: {notes}" if notes else f"Status set to '{status}'",
-            admin_id=session['user']['id']
+            admin_id=session['user']['id'],
+            actor_role='admin',
         )
         return jsonify({'success': True, 'message': 'Status updated'})
     except Exception as e:
@@ -141,6 +206,15 @@ def update_application_status(app_id):
 def approve_seller(user_id):
     try:
         UserModel().update_role(user_id, 'seller')
+        from security import log_audit
+        log_audit(
+            action='approve_seller',
+            target_type='user',
+            target_id=user_id,
+            details='Seller account approved',
+            admin_id=session['user']['id'],
+            actor_role='admin',
+        )
         return jsonify({'success': True, 'message': 'Seller approved'})
     except Exception as e:
         return jsonify({'error': str(e)}), 500
@@ -150,6 +224,15 @@ def approve_seller(user_id):
 def reject_seller(user_id):
     try:
         UserModel().update_role(user_id, 'user')
+        from security import log_audit
+        log_audit(
+            action='reject_seller',
+            target_type='user',
+            target_id=user_id,
+            details='Seller application rejected',
+            admin_id=session['user']['id'],
+            actor_role='admin',
+        )
         return jsonify({'success': True, 'message': 'Seller rejected'})
     except Exception as e:
         return jsonify({'error': str(e)}), 500
@@ -189,7 +272,8 @@ def update_product_status(product_id):
             target_type='product',
             target_id=product_id,
             details=f"Status set to '{status}'. Reason: {reason}" if reason else f"Status set to '{status}'",
-            admin_id=session['user']['id']
+            admin_id=session['user']['id'],
+            actor_role='admin',
         )
         return jsonify({'success': True, 'product': updated})
     except Exception as e:
@@ -221,7 +305,8 @@ def api_admin_order_status(order_id):
         target_type='order',
         target_id=order_id,
         details=f"Status set to '{status}'",
-        admin_id=session['user']['id']
+        admin_id=session['user']['id'],
+        actor_role='admin',
     )
 
     buyer_id = updated.get('buyer_id')
@@ -259,6 +344,15 @@ def api_admin_cancel_order(order_id):
     try:
         cancelled_order = OrderModel().cancel_order(order_id, is_admin=True)
         if cancelled_order:
+            from security import log_audit
+            log_audit(
+                action='cancel_order',
+                target_type='order',
+                target_id=order_id,
+                details='Order cancelled by admin',
+                admin_id=session['user']['id'],
+                actor_role='admin',
+            )
             return jsonify({
                 'success': True,
                 'message': 'Order cancelled successfully by admin. Stock has been restored.',
@@ -271,22 +365,70 @@ def api_admin_cancel_order(order_id):
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
+@admin_bp.route('/api/active-sessions', methods=['GET'])
+@admin_required
+def api_active_sessions():
+    """Get currently active user sessions grouped by role."""
+    import os
+    from supabase import create_client
+    from datetime import datetime, timezone, timedelta
+    try:
+        sb = create_client(os.getenv('SUPABASE_URL'), os.getenv('SUPABASE_SERVICE_ROLE_KEY'))
+        cutoff = (datetime.now(timezone.utc) - timedelta(minutes=30)).isoformat()
+        rows = sb.table('user_sessions').select(
+            'session_id, user_id, role, ip_address, device_os, device_browser, device_type, last_seen, is_active, user:users(first_name, last_name, email, role)'
+        ).eq('is_active', True).gte('last_seen', cutoff).order('last_seen', desc=True).execute()
+        latest_by_user = {}
+        active_sessions = rows.data or []
+        for row in active_sessions:
+            row['role'] = (row.get('user') or {}).get('role') or row.get('role', '')
+            latest_by_user.setdefault(row.get('user_id') or row.get('session_id'), row)
+        active_users = list(latest_by_user.values())
+        counts = {
+            'buyer': 0,
+            'seller': 0,
+            'rider': 0,
+            'admin': 0,
+            'other': 0,
+            'total': len(active_users),
+        }
+        for active_user in active_users:
+            role = active_user.get('role', '')
+            counts[role if role in ('buyer', 'seller', 'rider', 'admin') else 'other'] += 1
+        return jsonify({
+            'sessions': active_users,
+            'active_sessions_count': len(active_sessions),
+            'counts': counts,
+            'idle_timeout_minutes': 30,
+        })
+    except Exception as e:
+        return jsonify({'error': f'Failed to load active sessions: {e}'}), 500
+
+
 @admin_bp.route('/api/audit-logs', methods=['GET'])
 @admin_required
 def api_audit_logs():
     """Get admin audit logs with optional filters."""
     import os
     from supabase import create_client
-    sb = create_client(os.getenv('SUPABASE_URL'), os.getenv('SUPABASE_SERVICE_ROLE_KEY'))
-    limit       = min(int(request.args.get('limit', 50)), 200)
-    target_type = request.args.get('target_type', '').strip() or None
-    query = sb.table('audit_logs').select(
-        'id, action, target_type, target_id, details, ip_address, device_os, device_browser, device_type, created_at, admin:users(first_name, last_name, email)'
-    ).order('created_at', desc=True).limit(limit)
-    if target_type:
-        query = query.eq('target_type', target_type)
-    rows = query.execute()
-    return jsonify(rows.data or [])
+    try:
+        limit = max(1, min(int(request.args.get('limit', 50)), 200))
+        target_type = request.args.get('target_type', '').strip() or None
+        actor_role = request.args.get('actor_role', '').strip() or None
+        sb = create_client(os.getenv('SUPABASE_URL'), os.getenv('SUPABASE_SERVICE_ROLE_KEY'))
+        query = sb.table('audit_logs').select(
+            'id, action, target_type, target_id, details, ip_address, device_os, device_browser, device_type, actor_role, created_at, admin:users(first_name, last_name, email, role)'
+        ).order('created_at', desc=True).limit(limit)
+        if target_type:
+            query = query.eq('target_type', target_type)
+        if actor_role:
+            query = query.eq('actor_role', actor_role)
+        rows = query.execute()
+        return jsonify(rows.data or [])
+    except ValueError:
+        return jsonify({'error': 'limit must be an integer'}), 400
+    except Exception as e:
+        return jsonify({'error': f'Failed to load audit logs: {e}'}), 500
 
 
 @admin_bp.route('/api/stats', methods=['GET'])
@@ -417,10 +559,25 @@ def api_admin_commission():
         return jsonify({r['key']: r['value'] for r in (rows.data or [])})
 
     data = request.get_json() or {}
+    current_rows = sb.table('admin_settings').select('key,value').execute()
+    current_rates = {row['key']: row['value'] for row in (current_rows.data or [])}
+    changed_rates = []
     for key in ('commission_rate', 'rider_rate'):
         if key in data:
             val = str(data[key]).strip()
             sb.table('admin_settings').upsert({'key': key, 'value': val, 'updated_at': 'now()'}).execute()
+            if str(current_rates.get(key, '')) != val:
+                changed_rates.append(f'{key}: {current_rates.get(key, "unset")} -> {val}')
+    if changed_rates:
+        from security import log_audit
+        log_audit(
+            action='update_commission_rates',
+            target_type='settings',
+            target_id='commission',
+            details='; '.join(changed_rates),
+            admin_id=session['user']['id'],
+            actor_role='admin',
+        )
     return jsonify({'success': True})
 
 

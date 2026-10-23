@@ -1,0 +1,252 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Grande Admin — Backup</title>
+    <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@600;700&family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/dashboard.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/admin.css') }}">
+    <style>
+        .backup-hero { background:linear-gradient(135deg,#1a1a3e,#2d2d6e); color:#fff; border-radius:16px; padding:28px 32px; margin-bottom:24px; display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:16px; }
+        .backup-hero h2 { font-size:20px; font-weight:700; margin:0 0 6px; }
+        .backup-hero p  { font-size:13px; opacity:.8; margin:0; }
+        .backup-btn { background:#FF2BAC; color:#fff; border:none; border-radius:10px; padding:12px 24px; font-size:14px; font-weight:700; cursor:pointer; transition:all .2s; white-space:nowrap; }
+        .backup-btn:hover { background:#e0209a; transform:translateY(-1px); }
+        .backup-btn:disabled { opacity:.6; cursor:not-allowed; transform:none; }
+        .stat-row { display:grid; grid-template-columns:repeat(auto-fit,minmax(140px,1fr)); gap:12px; margin-bottom:24px; }
+        .stat-box  { background:#fff; border-radius:12px; padding:16px; box-shadow:0 2px 8px rgba(0,0,0,.07); text-align:center; }
+        .stat-box .num { font-size:24px; font-weight:700; color:#1a1a3e; }
+        .stat-box .lbl { font-size:12px; color:#888; margin-top:4px; }
+        .badge-success { background:#d4edda; color:#155724; padding:3px 10px; border-radius:20px; font-size:11px; font-weight:600; }
+        .badge-failed  { background:#f8d7da; color:#721c24; padding:3px 10px; border-radius:20px; font-size:11px; font-weight:600; }
+        .progress-overlay { display:none; position:fixed; inset:0; background:rgba(0,0,0,.5); z-index:9999; align-items:center; justify-content:center; flex-direction:column; gap:16px; }
+        .progress-overlay.show { display:flex; }
+        .progress-box { background:#fff; border-radius:16px; padding:32px 40px; text-align:center; max-width:360px; }
+        .spinner { width:48px; height:48px; border:4px solid #e8e8f0; border-top-color:#FF2BAC; border-radius:50%; animation:spin .8s linear infinite; margin:0 auto 16px; }
+        @keyframes spin { to { transform:rotate(360deg); } }
+        .notes-input { width:100%; padding:10px 14px; border:1.5px solid #e8e8f0; border-radius:10px; font-size:13px; font-family:inherit; resize:none; }
+    </style>
+</head>
+<body>
+
+<div id="sidebarOverlay"></div>
+<button class="sidebar-toggle" id="sidebarToggle">&#9776;</button>
+
+<aside class="sidebar">
+    <div class="sidebar-logo">Grande Admin</div>
+    <ul class="sidebar-menu">
+        <li><a href="/admin"><span class="icon">🏠</span> Dashboard</a></li>
+        <li class="menu-group">MANAGE</li>
+        <li><a href="/admin/applications"><span class="icon">📋</span> Applications</a></li>
+        <li><a href="/admin/users"><span class="icon">👥</span> Users</a></li>
+        <li><a href="/admin/sellers"><span class="icon">🏪</span> Sellers</a></li>
+        <li><a href="/admin/riders"><span class="icon">🏍️</span> Riders</a></li>
+        <li class="menu-group">STORE</li>
+        <li><a href="/admin/products"><span class="icon">📦</span> Products</a></li>
+        <li><a href="/admin/orders"><span class="icon">🛒</span> Orders</a></li>
+        <li class="menu-group">SUPPORT</li>
+        <li><a href="/messages/admin"><span class="icon">💬</span> Chat Support</a></li>
+        <li class="menu-group">SYSTEM</li>
+        <li><a href="/admin/audit-logs"><span class="icon">&#128269;</span> Audit Logs</a></li>
+        <li><a href="/admin/backup" class="active"><span class="icon">&#128190;</span> Backup</a></li>
+        <li><a href="/admin/reports"><span class="icon">🚩</span> Reports</a></li>
+        <li><a href="/admin/settings"><span class="icon">⚙️</span> Settings</a></li>
+    </ul>
+    <div class="sidebar-footer">
+        <div class="sidebar-user">👤 {{ session.user.name }}</div>
+        <a href="/logout" class="logout-link">🚪 Logout</a>
+    </div>
+</aside>
+
+<div class="main">
+    <div class="topbar">
+        <div class="topbar-title">Database Backup</div>
+        <div class="topbar-right">Admin Panel</div>
+    </div>
+    <div class="content">
+
+        <!-- Hero -->
+        <div class="backup-hero">
+            <div>
+                <h2>&#128190; Database Backup</h2>
+                <p>Export all critical data to a JSON backup file stored securely in cloud storage.</p>
+                <p style="margin-top:6px;font-size:12px;opacity:.6">Tables backed up: users, orders, products, applications, reviews, audit logs & more</p>
+            </div>
+            <div style="display:flex;flex-direction:column;gap:10px;align-items:flex-end">
+                <textarea id="backupNotes" class="notes-input" rows="2" placeholder="Optional notes for this backup..." style="width:260px;background:rgba(255,255,255,.1);color:#fff;border-color:rgba(255,255,255,.3)"></textarea>
+                <button class="backup-btn" id="createBackupBtn" onclick="createBackup()">&#9654; Create Backup Now</button>
+            </div>
+        </div>
+
+        <!-- Stats -->
+        <div class="stat-row" id="statsRow">
+            <div class="stat-box"><div class="num" id="statTotal">—</div><div class="lbl">Total Backups</div></div>
+            <div class="stat-box"><div class="num" id="statSuccess">—</div><div class="lbl">Successful</div></div>
+            <div class="stat-box"><div class="num" id="statFailed">—</div><div class="lbl">Failed</div></div>
+            <div class="stat-box"><div class="num" id="statLastDate">—</div><div class="lbl">Last Backup</div></div>
+        </div>
+
+        <!-- Backup History -->
+        <div class="card">
+            <div class="card-header">
+                <h2>Backup History</h2>
+                <button onclick="loadHistory()" style="padding:6px 14px;background:#1a1a3e;color:#fff;border:none;border-radius:8px;cursor:pointer;font-size:12px;">🔄 Refresh</button>
+            </div>
+            <div class="table-responsive">
+                <table class="table">
+                    <thead>
+                        <tr>
+                            <th>Date & Time</th>
+                            <th>File Name</th>
+                            <th>Size</th>
+                            <th>Rows</th>
+                            <th>Status</th>
+                            <th>Triggered By</th>
+                            <th>Notes</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody id="backupTable">
+                        <tr><td colspan="8" style="text-align:center;padding:40px;color:#888">Loading...</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+    </div>
+</div>
+
+<!-- Progress Overlay -->
+<div class="progress-overlay" id="progressOverlay">
+    <div class="progress-box">
+        <div class="spinner"></div>
+        <h3 style="font-size:16px;font-weight:700;color:#1a1a3e;margin:0 0 8px">Creating Backup...</h3>
+        <p style="font-size:13px;color:#888;margin:0">Exporting all tables. This may take a moment.</p>
+    </div>
+</div>
+
+<div class="toast" id="toast"></div>
+<script src="{{ url_for('static', filename='js/api.js') }}"></script>
+<script>
+async function createBackup() {
+    const btn   = document.getElementById('createBackupBtn');
+    const notes = document.getElementById('backupNotes').value.trim();
+    btn.disabled = true;
+    document.getElementById('progressOverlay').classList.add('show');
+
+    try {
+        const res  = await fetch('/admin/api/backup/create', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            credentials: 'include',
+            body: JSON.stringify({ notes })
+        });
+        const data = await res.json();
+        document.getElementById('progressOverlay').classList.remove('show');
+
+        if (res.ok && data.backup_id) {
+            showToast(`✅ Backup created! ${data.total_rows.toLocaleString()} rows, ${data.file_size_kb} KB`, 'success');
+            document.getElementById('backupNotes').value = '';
+            loadHistory();
+        } else {
+            showToast('❌ Backup failed: ' + (data.error || 'Unknown error'), 'error');
+        }
+    } catch (e) {
+        document.getElementById('progressOverlay').classList.remove('show');
+        showToast('❌ Network error. Please try again.', 'error');
+    }
+    btn.disabled = false;
+}
+
+async function loadHistory() {
+    try {
+        const res  = await fetch('/admin/api/backup/history?limit=20', { credentials: 'include' });
+        const data = await res.json();
+
+        // Update stats
+        const total   = data.length;
+        const success = data.filter(b => b.status === 'success').length;
+        const failed  = total - success;
+        const last    = data[0]?.created_at ? new Date(data[0].created_at).toLocaleDateString() : '—';
+        document.getElementById('statTotal').textContent   = total;
+        document.getElementById('statSuccess').textContent = success;
+        document.getElementById('statFailed').textContent  = failed;
+        document.getElementById('statLastDate').textContent = last;
+
+        if (!data.length) {
+            document.getElementById('backupTable').innerHTML =
+                '<tr><td colspan="8" style="text-align:center;padding:40px;color:#888">No backups yet. Create your first backup above.</td></tr>';
+            return;
+        }
+
+        document.getElementById('backupTable').innerHTML = data.map(b => {
+            const dt      = b.created_at ? new Date(b.created_at).toLocaleString() : '—';
+            const size    = b.file_size_kb ? `${b.file_size_kb} KB` : '—';
+            const rows    = b.total_rows ? Number(b.total_rows).toLocaleString() : '—';
+            const badge   = b.status === 'success'
+                ? '<span class="badge-success">✅ Success</span>'
+                : '<span class="badge-failed">❌ Failed</span>';
+            const notes   = b.notes ? `<span title="${b.notes}" style="font-size:11px;color:#888">${b.notes.slice(0,30)}${b.notes.length>30?'…':''}</span>` : '—';
+            return `<tr>
+                <td style="font-size:12px;white-space:nowrap">${dt}</td>
+                <td style="font-size:12px;font-family:monospace">${b.file_name||'—'}</td>
+                <td style="font-size:12px">${size}</td>
+                <td style="font-size:12px">${rows}</td>
+                <td>${badge}</td>
+                <td style="font-size:12px">${b.triggered_by||'—'}</td>
+                <td>${notes}</td>
+                <td style="white-space:nowrap">
+                    ${b.status === 'success' ? `<button onclick="downloadBackup('${b.id}')" style="padding:4px 10px;background:#1a1a3e;color:#fff;border:none;border-radius:6px;cursor:pointer;font-size:11px;margin-right:4px">&#11015; Download</button>` : ''}
+                    <button onclick="deleteBackup('${b.id}')" style="padding:4px 10px;background:#e74c3c;color:#fff;border:none;border-radius:6px;cursor:pointer;font-size:11px">&#128465; Delete</button>
+                </td>
+            </tr>`;
+        }).join('');
+    } catch (e) {
+        document.getElementById('backupTable').innerHTML =
+            '<tr><td colspan="8" style="text-align:center;color:#e74c3c">Failed to load backup history.</td></tr>';
+    }
+}
+
+async function downloadBackup(backupId) {
+    try {
+        const res  = await fetch(`/admin/api/backup/${backupId}/download`, { credentials: 'include' });
+        const data = await res.json();
+        if (data.url) {
+            window.open(data.url, '_blank');
+        } else {
+            showToast('❌ Download URL unavailable.', 'error');
+        }
+    } catch {
+        showToast('❌ Failed to get download link.', 'error');
+    }
+}
+
+async function deleteBackup(backupId) {
+    if (!confirm('Delete this backup? This cannot be undone.')) return;
+    try {
+        const res  = await fetch(`/admin/api/backup/${backupId}`, { method: 'DELETE', credentials: 'include' });
+        const data = await res.json();
+        if (data.success) {
+            showToast('🗑️ Backup deleted.', 'success');
+            loadHistory();
+        } else {
+            showToast('❌ Failed to delete backup.', 'error');
+        }
+    } catch {
+        showToast('❌ Network error.', 'error');
+    }
+}
+
+function showToast(msg, type) {
+    const t = document.getElementById('toast');
+    t.textContent   = msg;
+    t.style.background = type === 'success' ? '#2ecc71' : '#e74c3c';
+    t.classList.add('show');
+    setTimeout(() => t.classList.remove('show'), 4000);
+}
+
+loadHistory();
+</script>
+</body>
+</html>
