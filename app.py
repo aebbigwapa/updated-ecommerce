@@ -1,7 +1,8 @@
-from flask import Flask, Response
+from flask import Flask, Response, session
 from flask_cors import CORS
 from dotenv import load_dotenv
 import os
+import time
 
 load_dotenv()
 
@@ -101,6 +102,28 @@ def create_app():
     # Init CSRF AFTER blueprints are registered
     init_csrf(app)
 
+    @app.after_request
+    def _no_cache_protected_routes(response):
+        from flask import request as req
+        protected = ('/admin', '/seller', '/buyer', '/rider')
+        if req.path.startswith(protected):
+            response.headers['Cache-Control'] = 'no-store, no-cache, must-revalidate, private'
+            response.headers['Pragma'] = 'no-cache'
+            response.headers['Expires'] = '0'
+        return response
+
+    @app.before_request
+    def _refresh_browser_session_activity():
+        user = session.get('user') or {}
+        user_id = user.get('id') or session.get('user_id')
+        role = user.get('role') or session.get('user_role')
+        session_id = session.get('audit_session_id')
+        now = time.time()
+        if user_id and role and session_id and now - session.get('_audit_last_touch', 0) >= 300:
+            from security import log_session
+            log_session(user_id, role, 'activity', session_id)
+            session['_audit_last_touch'] = now
+
     # Ensure csrf_token is always available in templates even if init_csrf fails
     @app.context_processor
     def inject_csrf():
@@ -134,8 +157,37 @@ def create_app():
 
     # Note: /login and /logout are handled by auth_bp blueprint
     # No need to duplicate them here
-    
+
+    # ── Auto-backup every 12 hours ────────────────────────────
+    _start_auto_backup(app)
+
     return app
+
+
+def _start_auto_backup(app):
+    try:
+        from apscheduler.schedulers.background import BackgroundScheduler
+        scheduler = BackgroundScheduler(daemon=True)
+        scheduler.add_job(
+            func=_run_auto_backup,
+            trigger='interval',
+            hours=12,
+            id='auto_backup',
+            replace_existing=True,
+        )
+        scheduler.start()
+        print('[AutoBackup] Scheduler started — every 12 hours')
+    except Exception as e:
+        print(f'[AutoBackup] Failed to start scheduler: {e}')
+
+
+def _run_auto_backup():
+    try:
+        from services.backup_service import BackupService
+        result = BackupService().create_backup(triggered_by='auto', notes='Scheduled every 12 hours')
+        print(f'[AutoBackup] {"✅ Success" if result["success"] else "❌ Failed"} — {result["file_name"]} ({result["file_size_kb"]} KB, {result["total_rows"]} rows)')
+    except Exception as e:
+        print(f'[AutoBackup] Error: {e}')
 
 # For backward compatibility
 if __name__ == '__main__':
