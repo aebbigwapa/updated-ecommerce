@@ -41,7 +41,7 @@ def api_backup_create():
         from security import log_audit
         log_audit(action='create_backup', target_type='system', target_id=result.get('backup_id',''),
                   details=f"Backup created: {result.get('file_name','')} ({result.get('file_size_kb',0)} KB, {result.get('total_rows',0)} rows)",
-                  admin_id=session['user']['id'], actor_role='admin')
+                  admin_id=session['user']['id'])
         return jsonify(result)
     except Exception as e:
         return jsonify({'error': str(e)}), 500
@@ -81,7 +81,7 @@ def api_backup_delete(backup_id):
         if ok:
             from security import log_audit
             log_audit(action='delete_backup', target_type='system', target_id=backup_id,
-                      details='Backup deleted by admin', admin_id=session['user']['id'], actor_role='admin')
+                      details='Backup deleted by admin', admin_id=session['user']['id'])
         return jsonify({'success': ok})
     except Exception as e:
         return jsonify({'error': str(e)}), 500

@@ -452,6 +452,12 @@ def log_failed_login(sb_client, identifier, ip_address, user_agent=None):
         except Exception:
             pass
     log_activity(sb_client, user_id, 'failed_login', ip_address, user_agent)
+    log_audit(
+        action='failed_login',
+        target_type='user',
+        target_id=user_id or '',
+        details='Failed login attempt',
+    )
 
 
 def log_account_locked(sb_client, identifier, ip_address, user_agent=None):
@@ -465,39 +471,118 @@ def log_account_locked(sb_client, identifier, ip_address, user_agent=None):
         except Exception:
             pass
     log_activity(sb_client, user_id, 'account_locked', ip_address, user_agent)
+    log_audit(
+        action='account_locked',
+        target_type='user',
+        target_id=user_id or '',
+        details='Account locked after failed login attempts',
+    )
 
 
-def log_audit(action: str, target_type: str, target_id: str, details: str = '', admin_id: str = None):
+def _log_audit_error(message: str):
+    try:
+        from flask import current_app
+        current_app.logger.exception(message)
+    except RuntimeError:
+        import logging
+        logging.getLogger(__name__).exception(message)
+
+
+def log_audit(
+    action: str,
+    target_type: str,
+    target_id: str,
+    details: str = '',
+    admin_id: str = None,
+    actor_role: str = None,
+):
     """
-    Write an admin audit log entry to the audit_logs table.
-    action      : e.g. 'approve_application', 'reject_product', 'update_order_status'
-    target_type : e.g. 'application', 'product', 'order', 'user'
-    target_id   : the ID of the affected record
-    details     : extra context (reason, notes, new status, etc.)
-    admin_id    : ID of the admin performing the action
+    Write an audit log entry to the audit_logs table.
+    Works for admin, seller, and buyer actions.
     """
     try:
-        import os
-        from supabase import create_client
-        from flask import request as _req
-        sb = create_client(os.getenv('SUPABASE_URL'), os.getenv('SUPABASE_SERVICE_ROLE_KEY'))
+        from flask import request as _req, session as _session
+        sb = _get_supabase_client()
+        if sb is None:
+            raise RuntimeError('Supabase client is unavailable for audit logging')
         ip = _req.headers.get('X-Forwarded-For', _req.remote_addr) or 'unknown'
         ua = _req.headers.get('User-Agent', '') or ''
         device = parse_device(ua)
+        actor = getattr(_req, 'current_user', None) or _session.get('user') or {}
+        if not actor:
+            actor = {
+                'id': _session.get('user_id'),
+                'role': _session.get('user_role'),
+            }
+        actor_id = admin_id or actor.get('id')
+        actor_role = actor_role or actor.get('role')
         sb.table('audit_logs').insert({
-            'admin_id':    admin_id,
-            'action':      action[:200],
-            'target_type': target_type[:50],
-            'target_id':   str(target_id)[:100],
-            'details':     details[:500],
-            'ip_address':  ip[:45],
-            'device_os':   device['os'],
+            'admin_id':       actor_id,
+            'actor_role':     actor_role,
+            'action':         action[:200],
+            'target_type':    target_type[:50],
+            'target_id':      str(target_id)[:100] if target_id else None,
+            'details':        details[:500],
+            'ip_address':     ip[:45],
+            'device_os':      device['os'],
             'device_browser': device['browser'],
-            'device_type': device['device_type'],
-            'user_agent':  device['raw'],
+            'device_type':    device['device_type'],
+            'user_agent':     device['raw'],
         }).execute()
     except Exception:
-        pass
+        _log_audit_error('Failed to write audit log entry')
+
+
+def log_session(user_id: str, role: str, action: str, session_id: str = None):
+    """
+    Track a single browser or API login in user_sessions.
+    Returns the session ID for login events.
+    """
+    try:
+        from flask import request as _req
+        import uuid
+        sb = _get_supabase_client()
+        if sb is None:
+            raise RuntimeError('Supabase client is unavailable for session logging')
+        if action not in ('login', 'activity', 'logout'):
+            raise ValueError(f'Unsupported session action: {action}')
+        if action == 'login':
+            session_id = session_id or str(uuid.uuid4())
+        if not session_id:
+            raise ValueError('A session ID is required for activity and logout events')
+
+        ip = _req.headers.get('X-Forwarded-For', _req.remote_addr) or 'unknown'
+        ua = _req.headers.get('User-Agent', '') or ''
+        device = parse_device(ua)
+        now = datetime.now(timezone.utc).isoformat()
+        if action == 'login':
+            sb.table('user_sessions').upsert({
+                'session_id':     session_id,
+                'user_id':        user_id,
+                'role':           role,
+                'ip_address':     ip[:45],
+                'device_os':      device['os'],
+                'device_browser': device['browser'],
+                'device_type':    device['device_type'],
+                'logged_in_at':   now,
+                'last_seen':      now,
+                'is_active':      True,
+                'logged_out_at':  None,
+            }, on_conflict='session_id').execute()
+        elif action == 'activity':
+            sb.table('user_sessions').update({
+                'last_seen': now,
+            }).eq('session_id', session_id).eq('user_id', user_id).execute()
+        elif action == 'logout':
+            sb.table('user_sessions').update({
+                'is_active': False,
+                'last_seen': now,
+                'logged_out_at': now,
+            }).eq('session_id', session_id).eq('user_id', user_id).execute()
+        return session_id
+    except Exception:
+        _log_audit_error('Failed to write user session event')
+        return None
 
 
 # ── reCAPTCHA Verification ─────────────────────────────────────
