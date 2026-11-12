@@ -425,25 +425,79 @@ def api_active_sessions():
 @admin_bp.route('/api/audit-logs', methods=['GET'])
 @admin_required
 def api_audit_logs():
-    """Get admin audit logs with optional filters."""
-    import os
+    """
+    Get audit logs with filters and pagination. Returns {logs, total, page, per_page}.
+    Query params: page, per_page, target_type, actor_role, q (search), from, to (ISO datetimes),
+    format=csv (export up to 5000 matching rows instead of a page).
+    """
+    import os, re, csv, io
+    from datetime import datetime
+    from flask import Response
     from supabase import create_client
     try:
-        limit = max(1, min(int(request.args.get('limit', 50)), 200))
-        target_type = request.args.get('target_type', '').strip() or None
-        actor_role = request.args.get('actor_role', '').strip() or None
+        page        = max(1, int(request.args.get('page', 1)))
+        per_page    = max(1, min(int(request.args.get('per_page', 50)), 200))
+        target_type = request.args.get('target_type', '').strip()
+        actor_role  = request.args.get('actor_role', '').strip()
+        # Strip characters that have meaning in PostgREST or()/ilike syntax
+        search      = re.sub(r'[,()*%\\:"]', ' ', request.args.get('q', '')).strip()[:100]
+        date_from   = request.args.get('from', '').strip()
+        date_to     = request.args.get('to', '').strip()
+        for d in (date_from, date_to):
+            if d:
+                datetime.fromisoformat(d.replace('Z', '+00:00'))  # raises ValueError if malformed
+        as_csv = request.args.get('format') == 'csv'
+
         sb = create_client(os.getenv('SUPABASE_URL'), os.getenv('SUPABASE_SERVICE_ROLE_KEY'))
         query = sb.table('audit_logs').select(
-            'id, action, target_type, target_id, details, ip_address, device_os, device_browser, device_type, actor_role, created_at, admin:users(first_name, last_name, email, role)'
-        ).order('created_at', desc=True).limit(limit)
+            'id, action, target_type, target_id, details, ip_address, device_os, device_browser, device_type, user_agent, actor_role, created_at, admin:users(first_name, last_name, email, role)',
+            count='exact'
+        ).order('created_at', desc=True)
         if target_type:
             query = query.eq('target_type', target_type)
         if actor_role:
             query = query.eq('actor_role', actor_role)
-        rows = query.execute()
-        return jsonify(rows.data or [])
+        if date_from:
+            query = query.gte('created_at', date_from)
+        if date_to:
+            query = query.lte('created_at', date_to)
+        if search:
+            conditions = [f'action.ilike.*{search}*', f'details.ilike.*{search}*',
+                          f'ip_address.ilike.*{search}*', f'target_id.ilike.*{search}*']
+            # Also match the acting user's name or email
+            users = sb.table('users').select('id').or_(
+                f'first_name.ilike.*{search}*,last_name.ilike.*{search}*,email.ilike.*{search}*'
+            ).limit(100).execute().data or []
+            if users:
+                conditions.append(f"admin_id.in.({','.join(u['id'] for u in users)})")
+            query = query.or_(','.join(conditions))
+
+        if as_csv:
+            rows = query.range(0, 4999).execute().data or []
+            buf = io.StringIO()
+            writer = csv.writer(buf)
+            writer.writerow(['created_at', 'user', 'email', 'role', 'action', 'target_type', 'target_id',
+                             'details', 'ip_address', 'device_browser', 'device_os', 'device_type'])
+            for r in rows:
+                u = r.get('admin') or {}
+                writer.writerow([
+                    r.get('created_at'), f"{u.get('first_name') or ''} {u.get('last_name') or ''}".strip(),
+                    u.get('email'), r.get('actor_role') or u.get('role'), r.get('action'), r.get('target_type'),
+                    r.get('target_id'), r.get('details'), r.get('ip_address'), r.get('device_browser'),
+                    r.get('device_os'), r.get('device_type'),
+                ])
+            from security import log_audit
+            log_audit(action='export_audit_logs', target_type='system', target_id='',
+                      details=f'Exported {len(rows)} audit log rows to CSV', admin_id=session['user']['id'])
+            filename = f"audit_logs_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv"
+            return Response(buf.getvalue(), mimetype='text/csv',
+                            headers={'Content-Disposition': f'attachment; filename={filename}'})
+
+        offset = (page - 1) * per_page
+        rows = query.range(offset, offset + per_page - 1).execute()
+        return jsonify({'logs': rows.data or [], 'total': rows.count or 0, 'page': page, 'per_page': per_page})
     except ValueError:
-        return jsonify({'error': 'limit must be an integer'}), 400
+        return jsonify({'error': 'page/per_page must be integers and from/to must be ISO dates'}), 400
     except Exception as e:
         return jsonify({'error': f'Failed to load audit logs: {e}'}), 500
 

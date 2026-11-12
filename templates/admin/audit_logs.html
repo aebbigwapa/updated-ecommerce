@@ -17,9 +17,22 @@
         .badge-create  { background:#d4edda; color:#155724; }
         .badge-delete  { background:#f8d7da; color:#721c24; }
         .badge-order   { background:#fff3cd; color:#856404; }
+        .badge-security{ background:#ffe0cc; color:#8a3b00; }
         .device-info   { font-size:11px; color:#888; }
         .filter-row    { display:flex; gap:10px; flex-wrap:wrap; margin-bottom:16px; align-items:center; }
         .filter-row select, .filter-row input { padding:7px 12px; border:1px solid #e8e8f0; border-radius:8px; font-size:13px; }
+        .filter-row label { font-size:12px; color:#888; display:flex; align-items:center; gap:6px; }
+        .btn-dark  { padding:7px 16px; background:#1a1a3e; color:#fff; border:none; border-radius:8px; cursor:pointer; font-size:13px; }
+        .btn-light { padding:7px 16px; background:#f0f0f5; color:#1a1a3e; border:none; border-radius:8px; cursor:pointer; font-size:13px; }
+        .btn-light:disabled, .btn-dark:disabled { opacity:.4; cursor:default; }
+        .role-chip { color:#fff; padding:1px 7px; border-radius:10px; font-size:10px; margin-left:4px; }
+        .log-row { cursor:pointer; }
+        .log-row:hover td { background:#fafaff; }
+        .log-detail td { background:#f8f8fc; font-size:12px; color:#444; }
+        .log-detail dl { display:grid; grid-template-columns:120px 1fr; gap:6px 12px; margin:0; }
+        .log-detail dt { color:#888; }
+        .log-detail dd { margin:0; word-break:break-all; }
+        .pager { display:flex; justify-content:space-between; align-items:center; margin-top:14px; font-size:13px; color:#666; flex-wrap:wrap; gap:10px; }
         .session-cards { display:grid; grid-template-columns:repeat(auto-fit,minmax(130px,1fr)); gap:12px; margin-bottom:16px; }
         .session-card  { background:#fff; border-radius:12px; padding:16px; box-shadow:0 2px 8px rgba(0,0,0,.07); text-align:center; }
         .session-card .num { font-size:28px; font-weight:700; color:#1a1a3e; }
@@ -96,15 +109,29 @@
         <div class="card">
             <div class="card-header"><h2>Activity Audit Trail</h2></div>
             <div class="filter-row">
-                <select id="filterType" onchange="loadLogs()">
-                    <option value="">All Actions</option>
-                    <option value="user">Login / Logout</option>
+                <select id="filterType" onchange="loadLogs(1)">
+                    <option value="">All Categories</option>
+                    <option value="user">Accounts &amp; Logins</option>
                     <option value="application">Applications</option>
                     <option value="product">Products</option>
                     <option value="order">Orders</option>
+                    <option value="cancellation_request">Cancellation Requests</option>
+                    <option value="settings">Settings</option>
+                    <option value="system">System / Backups</option>
                 </select>
-                <input type="text" id="filterSearch" placeholder="Search action or details..." oninput="renderLogs()" style="min-width:220px">
-                <button onclick="loadLogs()" style="padding:7px 16px;background:#1a1a3e;color:#fff;border:none;border-radius:8px;cursor:pointer;font-size:13px;">🔄 Refresh</button>
+                <select id="filterRole" onchange="loadLogs(1)">
+                    <option value="">All Roles</option>
+                    <option value="admin">Admin</option>
+                    <option value="seller">Seller</option>
+                    <option value="buyer">Buyer</option>
+                    <option value="rider">Rider</option>
+                </select>
+                <label>From <input type="date" id="filterFrom" onchange="loadLogs(1)"></label>
+                <label>To <input type="date" id="filterTo" onchange="loadLogs(1)"></label>
+                <input type="text" id="filterSearch" placeholder="Search user, action, details, IP..." oninput="onSearchInput()" style="min-width:240px">
+                <button class="btn-dark" onclick="loadLogs()">🔄 Refresh</button>
+                <button class="btn-light" onclick="clearFilters()">✖ Clear</button>
+                <button class="btn-light" onclick="exportCsv()">⬇ Export CSV</button>
             </div>
             <div class="table-responsive">
                 <table class="table">
@@ -122,6 +149,13 @@
                     <tbody id="auditTable"><tr><td colspan="7" style="text-align:center;padding:40px;color:#888">Loading...</td></tr></tbody>
                 </table>
             </div>
+            <div class="pager">
+                <span id="pagerInfo">—</span>
+                <span>
+                    <button class="btn-light" id="btnPrev" onclick="loadLogs(_page - 1)" disabled>‹ Prev</button>
+                    <button class="btn-light" id="btnNext" onclick="loadLogs(_page + 1)" disabled>Next ›</button>
+                </span>
+            </div>
         </div>
 
     </div>
@@ -130,7 +164,16 @@
 <div class="toast" id="toast"></div>
 <script src="{{ url_for('static', filename='js/api.js') }}"></script>
 <script>
-let _allLogs = [];
+const PER_PAGE   = 50;
+const ROLE_COLOR = { buyer:'#FF2BAC', seller:'#17a2b8', rider:'#fd7e14', admin:'#6f42c1' };
+let _logs = [], _page = 1, _total = 0, _searchTimer = null;
+
+function esc(v) {
+    return String(v ?? '').replace(/[&<>"']/g, c => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' }[c]));
+}
+
+// X-Forwarded-For holds "client, proxy, proxy" — the first entry is the visitor
+function clientIp(ip) { return (ip || '').split(',')[0].trim() || '—'; }
 
 async function loadSessions() {
     try {
@@ -154,12 +197,12 @@ async function loadSessions() {
             const name = `${u.first_name||''} ${u.last_name||''}`.trim() || u.email || '—';
             const dev  = [s.device_browser, s.device_os].filter(Boolean).join(' · ') || '—';
             const seen = s.last_seen ? new Date(s.last_seen).toLocaleString() : '—';
-            const roleColor = { buyer:'#FF2BAC', seller:'#17a2b8', rider:'#fd7e14', admin:'#6f42c1' }[s.role] || '#888';
+            const roleColor = ROLE_COLOR[s.role] || '#888';
             return `<tr>
-                <td>${name}</td>
-                <td><span style="background:${roleColor};color:#fff;padding:2px 8px;border-radius:10px;font-size:11px">${s.role||'—'}</span></td>
-                <td class="device-info">${dev}</td>
-                <td style="font-size:12px">${s.ip_address||'—'}</td>
+                <td>${esc(name)}</td>
+                <td><span style="background:${roleColor};color:#fff;padding:2px 8px;border-radius:10px;font-size:11px">${esc(s.role||'—')}</span></td>
+                <td class="device-info">${esc(dev)}</td>
+                <td style="font-size:12px" title="${esc(s.ip_address)}">${esc(clientIp(s.ip_address))}</td>
                 <td style="font-size:12px">${seen}</td>
             </tr>`;
         }).join('');
@@ -169,63 +212,121 @@ async function loadSessions() {
     }
 }
 
-async function loadLogs() {
-    const type = document.getElementById('filterType').value;
-    const url  = '/admin/api/audit-logs?limit=100' + (type ? `&target_type=${type}` : '');
+function filterParams() {
+    const p    = new URLSearchParams();
+    const val  = id => document.getElementById(id).value.trim();
+    if (val('filterType'))   p.set('target_type', val('filterType'));
+    if (val('filterRole'))   p.set('actor_role',  val('filterRole'));
+    if (val('filterSearch')) p.set('q',           val('filterSearch'));
+    // Date inputs are in the admin's local time — send exact UTC bounds for the whole day
+    if (val('filterFrom'))   p.set('from', new Date(val('filterFrom') + 'T00:00:00').toISOString());
+    if (val('filterTo'))     p.set('to',   new Date(val('filterTo')   + 'T23:59:59.999').toISOString());
+    return p;
+}
+
+async function loadLogs(page = _page) {
+    _page = Math.max(1, page);
+    const p = filterParams();
+    p.set('page', _page);
+    p.set('per_page', PER_PAGE);
+    document.getElementById('auditTable').innerHTML =
+        '<tr><td colspan="7" style="text-align:center;padding:40px;color:#888">Loading...</td></tr>';
     try {
-        const res = await fetch(url, { credentials: 'include' });
-        _allLogs  = await res.json();
+        const res  = await fetch('/admin/api/audit-logs?' + p, { credentials: 'include' });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || res.statusText);
+        _logs  = data.logs || [];
+        _total = data.total || 0;
         renderLogs();
-    } catch {
+    } catch (e) {
+        _logs = []; _total = 0;
+        updatePager();
         document.getElementById('auditTable').innerHTML =
-            '<tr><td colspan="7" style="text-align:center;color:#e74c3c">Failed to load logs.</td></tr>';
+            `<tr><td colspan="7" style="text-align:center;padding:20px;color:#e74c3c">Failed to load logs: ${esc(e.message)}</td></tr>`;
     }
 }
 
+function onSearchInput() {
+    clearTimeout(_searchTimer);
+    _searchTimer = setTimeout(() => loadLogs(1), 350);
+}
+
+function clearFilters() {
+    ['filterType', 'filterRole', 'filterFrom', 'filterTo', 'filterSearch'].forEach(id => document.getElementById(id).value = '');
+    loadLogs(1);
+}
+
+function exportCsv() {
+    const p = filterParams();
+    p.set('format', 'csv');
+    window.location = '/admin/api/audit-logs?' + p;
+}
+
+function updatePager() {
+    const start = _total ? (_page - 1) * PER_PAGE + 1 : 0;
+    const end   = Math.min(_page * PER_PAGE, _total);
+    document.getElementById('pagerInfo').textContent = `Showing ${start}–${end} of ${_total} events`;
+    document.getElementById('btnPrev').disabled = _page <= 1;
+    document.getElementById('btnNext').disabled = end >= _total;
+}
+
 function renderLogs() {
-    const search = document.getElementById('filterSearch').value.toLowerCase();
-    const logs   = _allLogs.filter(l =>
-        !search ||
-        (l.action||'').toLowerCase().includes(search) ||
-        (l.details||'').toLowerCase().includes(search) ||
-        (l.target_type||'').toLowerCase().includes(search)
-    );
-    if (!logs.length) {
+    updatePager();
+    if (!_logs.length) {
         document.getElementById('auditTable').innerHTML =
-            '<tr><td colspan="7" style="text-align:center;padding:40px;color:#888">No logs found.</td></tr>';
+            '<tr><td colspan="7" style="text-align:center;padding:40px;color:#888">No logs match these filters.</td></tr>';
         return;
     }
-    document.getElementById('auditTable').innerHTML = logs.map(l => {
+    document.getElementById('auditTable').innerHTML = _logs.map((l, i) => {
         const u      = l.admin || {};
         const actor  = `${u.first_name||''} ${u.last_name||''}`.trim() || u.email || '—';
+        const role   = l.actor_role || u.role;
         const dt     = l.created_at ? new Date(l.created_at).toLocaleString() : '—';
         const badge  = getBadge(l.action);
         const device = [l.device_browser, l.device_os, l.device_type].filter(Boolean).join(' · ') || '—';
-        return `<tr>
+        return `<tr class="log-row" onclick="toggleDetail(${i})" title="Click for full details">
             <td style="white-space:nowrap;font-size:12px">${dt}</td>
-            <td style="font-size:12px">${actor}</td>
-            <td><span class="badge-action ${badge.cls}">${badge.label}</span></td>
-            <td style="font-size:12px">${l.target_type||'—'}<br><span style="color:#aaa;font-size:11px">${(l.target_id||'').slice(0,8)}</span></td>
-            <td style="font-size:12px;max-width:200px">${l.details||'—'}</td>
-            <td class="device-info">${device}</td>
-            <td style="font-size:12px">${l.ip_address||'—'}</td>
-        </tr>`;
+            <td style="font-size:12px">${esc(actor)}${role ? `<span class="role-chip" style="background:${ROLE_COLOR[role]||'#888'}">${esc(role)}</span>` : ''}</td>
+            <td><span class="badge-action ${badge.cls}">${esc(badge.label)}</span></td>
+            <td style="font-size:12px">${esc(l.target_type||'—')}<br><span style="color:#aaa;font-size:11px">${esc((l.target_id||'').slice(0,8))}</span></td>
+            <td style="font-size:12px;max-width:260px">${esc(l.details||'—')}</td>
+            <td class="device-info">${esc(device)}</td>
+            <td style="font-size:12px">${esc(clientIp(l.ip_address))}</td>
+        </tr>
+        <tr class="log-detail" id="detail-${i}" style="display:none"><td colspan="7">
+            <dl>
+                <dt>Timestamp (UTC)</dt><dd>${esc(l.created_at)}</dd>
+                <dt>User</dt><dd>${esc(actor)}${u.email ? ` &lt;${esc(u.email)}&gt;` : ''}</dd>
+                <dt>Action</dt><dd>${esc(l.action)}</dd>
+                <dt>Target</dt><dd>${esc(l.target_type)} ${esc(l.target_id||'')}</dd>
+                <dt>Details</dt><dd>${esc(l.details||'—')}</dd>
+                <dt>IP chain</dt><dd>${esc(l.ip_address||'—')}</dd>
+                <dt>User agent</dt><dd>${esc(l.user_agent||'—')}</dd>
+            </dl>
+        </td></tr>`;
     }).join('');
+}
+
+function toggleDetail(i) {
+    const row = document.getElementById(`detail-${i}`);
+    row.style.display = row.style.display === 'none' ? '' : 'none';
 }
 
 function getBadge(action) {
     if (!action) return { cls:'badge-update', label:'unknown' };
-    if (action === 'login')                                      return { cls:'badge-login',  label:'🔑 login' };
-    if (action === 'logout')                                     return { cls:'badge-logout', label:'🚪 logout' };
-    if (action.includes('approve') || action.includes('active'))return { cls:'badge-approve', label:action };
-    if (action.includes('reject') || action.includes('delete')) return { cls:'badge-delete',  label:action };
-    if (action.includes('create'))                               return { cls:'badge-create',  label:action };
-    if (action.includes('order'))                                return { cls:'badge-order',   label:action };
-    return { cls:'badge-update', label:action };
+    const label = action.replace(/_/g, ' ');
+    if (action === 'login')  return { cls:'badge-login',  label:'🔑 login' };
+    if (action === 'logout') return { cls:'badge-logout', label:'🚪 logout' };
+    if (/failed_login|account_locked|password/.test(action))         return { cls:'badge-security', label:'⚠ ' + label };
+    if (/reject|delete|decline|cancel|issue/.test(action))           return { cls:'badge-delete',   label };
+    if (/approve|accept|active/.test(action))                        return { cls:'badge-approve',  label };
+    if (/create|place_order/.test(action))                           return { cls:'badge-create',   label };
+    if (/order|delivery/.test(action))                               return { cls:'badge-order',    label };
+    return { cls:'badge-update', label };
 }
 
 loadSessions();
-loadLogs();
+loadLogs(1);
 setInterval(loadSessions, 60000);
 </script>
 </body>
