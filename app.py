@@ -165,18 +165,25 @@ def create_app():
 
 
 def _start_auto_backup(app):
+    # Flask's debug reloader runs create_app() in a parent and a child process — only schedule in the child
+    if app.debug and os.environ.get('WERKZEUG_RUN_MAIN') != 'true':
+        return
     try:
+        from datetime import datetime
         from apscheduler.schedulers.background import BackgroundScheduler
         scheduler = BackgroundScheduler(daemon=True)
+        # Check every 10 min (and right at startup) whether the last backup is 12h+ old.
+        # A plain 12h interval restarts its countdown on every deploy/restart/sleep, so it never fired.
         scheduler.add_job(
             func=_run_auto_backup,
             trigger='interval',
-            hours=12,
+            minutes=10,
+            next_run_time=datetime.now(),
             id='auto_backup',
             replace_existing=True,
         )
         scheduler.start()
-        print('[AutoBackup] Scheduler started — every 12 hours')
+        print('[AutoBackup] Scheduler started — backup when last one is 12+ hours old')
     except Exception as e:
         print(f'[AutoBackup] Failed to start scheduler: {e}')
 
@@ -184,8 +191,9 @@ def _start_auto_backup(app):
 def _run_auto_backup():
     try:
         from services.backup_service import BackupService
-        result = BackupService().create_backup(triggered_by='auto', notes='Scheduled every 12 hours')
-        print(f'[AutoBackup] {"✅ Success" if result["success"] else "❌ Failed"} — {result["file_name"]} ({result["file_size_kb"]} KB, {result["total_rows"]} rows)')
+        result = BackupService().run_auto_backup_if_due(12)
+        if result:
+            print(f'[AutoBackup] {"✅ Success" if result["success"] else "❌ Failed"} — {result["file_name"]} ({result["file_size_kb"]} KB, {result["total_rows"]} rows)')
     except Exception as e:
         print(f'[AutoBackup] Error: {e}')
 

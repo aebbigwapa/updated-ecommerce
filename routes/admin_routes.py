@@ -47,6 +47,23 @@ def api_backup_create():
         return jsonify({'error': str(e)}), 500
 
 
+@admin_bp.route('/api/backup/cron', methods=['GET'])
+def api_backup_cron():
+    """External cron trigger (wakes the server if it is asleep). Requires ?token=BACKUP_CRON_TOKEN."""
+    import os, hmac
+    from services.backup_service import BackupService
+    expected = os.getenv('BACKUP_CRON_TOKEN', '')
+    if not expected or not hmac.compare_digest(request.args.get('token', ''), expected):
+        return jsonify({'error': 'Forbidden'}), 403
+    try:
+        result = BackupService().run_auto_backup_if_due(12)
+        if not result:
+            return jsonify({'ran': False, 'reason': 'Last backup is less than 12 hours old'})
+        return jsonify({'ran': True, **result})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
 @admin_bp.route('/api/backup/history', methods=['GET'])
 @admin_required
 def api_backup_history():

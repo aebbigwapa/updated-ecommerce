@@ -171,6 +171,21 @@ class BackupService:
         except Exception:
             return []
 
+    def get_last_backup_time(self) -> datetime | None:
+        """Return created_at of the most recent successful backup (any trigger)."""
+        r = (self.sb.table('backup_history').select('created_at')
+             .eq('status', 'success').order('created_at', desc=True).limit(1).execute())
+        if not r.data:
+            return None
+        return datetime.fromisoformat(r.data[0]['created_at'])
+
+    def run_auto_backup_if_due(self, interval_hours: int = 12) -> dict | None:
+        """Create an auto backup if the last successful one is older than interval_hours."""
+        last = self.get_last_backup_time()
+        if last and (datetime.now(timezone.utc) - last).total_seconds() < interval_hours * 3600:
+            return None
+        return self.create_backup(triggered_by='auto', notes=f'Scheduled every {interval_hours} hours')
+
     def delete_backup(self, backup_id: str) -> bool:
         """Delete a backup record and its file from storage."""
         try:
